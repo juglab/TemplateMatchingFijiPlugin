@@ -1,19 +1,21 @@
 package com.mycompany.imagej;
 
-import java.io.File;
 import java.io.IOException;
 
 import org.scijava.command.Command;
 
-import com.indago.io.DoubleTypeImgLoader;
-
+import net.imagej.Dataset;
 import net.imagej.ImageJ;
+import net.imagej.ImgPlus;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.RealRandomAccessible;
 import net.imglib2.interpolation.randomaccess.NLinearInterpolatorFactory;
+import net.imglib2.loops.LoopBuilder;
 import net.imglib2.realtransform.AffineTransform2D;
 import net.imglib2.realtransform.RealViews;
-import net.imglib2.type.numeric.real.DoubleType;
+import net.imglib2.type.numeric.RealType;
+import net.imglib2.type.numeric.real.FloatType;
+import net.imglib2.util.Util;
 import net.imglib2.view.Views;
 
 public class TemplateMatchingPlugin implements Command {
@@ -27,78 +29,54 @@ public class TemplateMatchingPlugin implements Command {
 
 	@Override
 	public void run() {
+		try {
+			runThrowsException();
+		} catch ( Exception e ) {
+			e.printStackTrace();
+		}
+	}
+
+	private < T extends RealType< T > > void runThrowsException() throws Exception {
 		final ImageJ ij = new ImageJ();
 		ij.ui().showUI();
-		String pathName = "/Users/prakash/Desktop/bridge.tif";
+		String pathName = "/Users/prakash/Desktop/bridge32.tif";
+		Dataset imagefile = ij.scifio().datasetIO().open( pathName );
+		ImgPlus< T > img = ( ImgPlus< T > ) imagefile.getImgPlus();
 
-//		Dataset imagefile;
-//		try {
-//			imagefile = ij.scifio().datasetIO().open( pathName );
-//		} catch ( IOException e ) {
-//			e.printStackTrace();
-//			return;
-//		}
-//		@SuppressWarnings( "unchecked" )
-//		ImgPlus< T > img = ( ImgPlus< T > ) imagefile.getImgPlus();
+		rotateAndShow( ij, img );
 
-		RandomAccessibleInterval< DoubleType > raiInput = DoubleTypeImgLoader.loadTiffEnsureType( new File( pathName ) );
+		double[] sigmas = { 1.5, 1.5 };
+		RandomAccessibleInterval< FloatType > imgSmooth = ij.op().filter().gauss( img, sigmas );
+//		Img< DoubleType > doubles = ij.op().convert().float64( Views.iterable( imgSmooth ) );
 
-		long x = -raiInput.dimension( 0 ) / 2;
-		long y = -raiInput.dimension( 1 ) / 2;
+		System.out.println( Util.getTypeFromInterval( imgSmooth ).getClass() );
+
+		FloatType maxVal = new FloatType();
+		ij.op().stats().max( maxVal, Views.iterable( imgSmooth ) );
+		float inverse = 1.0f / maxVal.getRealFloat();
+
+		System.out.println( inverse );
+
+//		System.out.println( Util.getTypeFromInterval( imgSmooth ).getClass() );
+
+		LoopBuilder.setImages( imgSmooth ).forEachPixel( pixel -> pixel.mul( inverse ) );
+		ij.ui().show( imgSmooth );
+	}
+
+	private < T extends RealType< T > > void rotateAndShow( final ImageJ ij, ImgPlus< T > img ) {
+		long x = -img.dimension( 0 ) / 2;
+		long y = -img.dimension( 1 ) / 2;
 		AffineTransform2D transform = new AffineTransform2D();
 		transform.translate( x, y );
 		transform.rotate( pi / 2 );
 		transform.translate( -x, -y );
-
-
-		RealRandomAccessible< DoubleType > realview =
+		RealRandomAccessible< T > realview =
 				RealViews.affineReal(
-				( Views.interpolate( Views.extendBorder( raiInput ), new NLinearInterpolatorFactory() ) ),
-				transform );
-		RandomAccessibleInterval< DoubleType > view = Views.interval( Views.raster( realview ), raiInput );
+						( Views.interpolate( Views.extendBorder( img ), new NLinearInterpolatorFactory() ) ),
+						transform );
+		RandomAccessibleInterval< T > view = Views.interval( Views.raster( realview ), img );
 		ij.ui().show( view );
-		double[] sigmas = { 1.5, 1.5 };
-		//RandomAccessibleInterval< ? extends RealType< ? > > imgSmooth = ij.op().filter().gauss( img, sigmas );
-		RandomAccessibleInterval< DoubleType > imgSmooth = ij.op().filter().gauss( raiInput, sigmas );
-		ij.ui().show( imgSmooth );
-
-
-		DoubleType maxVal = ij.op().stats().max( Views.iterable( raiInput ) );
-		DoubleType inverse = maxVal.createVariable();
-		inverse.setOne();
-		inverse.div( maxVal );
-
-		System.out.println( inverse.getRealDouble() );
-
-//		IterableInterval< T > iiSmooth = Views.iterable( imgSmooth );
-//		RandomAccess< T > raSmooth = imgSmooth.randomAccess();
-
-//		LoopBuilder.setImages( imgSmooth ).forEachPixel( pixel -> pixel.mul( inverse ) );
-
-		ij.op().math().multiply( Views.iterable( imgSmooth ), inverse );
-
-		ij.ui().show( imgSmooth );
 	}
 
 }
 
-
-//final File imagefile = ij.ui().chooseFile( null, "open" );
-//final File templatefile = ij.ui().chooseFile( null, "open" );
-
-// load the dataset
-//final Dataset imagedataset = ij.scifio().datasetIO().open( imagefile.getPath() );
-//ij.ui().show( imagedataset );
-
-//if ( templatefile != null ) {
-//
-//	final Dataset templatedataset = ij.scifio().datasetIO().open( templatefile.getPath() );
-//	ij.ui().show( templatedataset );
-//
-//}
-
-
-
-//for (int i :imagedataset.size()) {
-//	
-//}

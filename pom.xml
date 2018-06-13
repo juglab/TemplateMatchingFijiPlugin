@@ -12,13 +12,13 @@
 		<relativePath />
 	</parent>
 
-	<groupId>io.github.keisuke-ishihara</groupId>
-	<artifactId>hello-world-command</artifactId>
+	<groupId>io.github.mangalp</groupId>
+	<artifactId>template-matching-command</artifactId>
 	<version>0.1.0-SNAPSHOT</version>
 
-	<name>Hello World Command</name>
-	<description>A Maven project implementing an ImageJ command.</description>
-	<url>http://gitbhub.com/keisuke-ishihara/hello-world-command</url>
+	<name>TemplateMatchingFijiPlugin</name>
+	<description>A Maven project implementing TemplateMatching ImageJ command.</description>
+	<url>https://github.com/juglab/TemplateMatchingFijiPlugin</url>
 	<inceptionYear>2018</inceptionYear>
 	<organization>
 		<name>CSBD</name>
@@ -34,9 +34,9 @@
 	<developers>
 		<!-- See https://imagej.net/Team -->
 		<developer>
-			<id>keisuke-ishihara</id>
-			<name>Keisuke Ishihara</name>
-			<url>http://imagej.net/User:KeisukeIshihara</url>
+			<id>mangalp</id>
+			<name>Mangal Prakash</name>
+			<url>https://github.com/mangalp</url>
 			<roles>
 				<role>founder</role>
 				<role>lead</role>
@@ -62,23 +62,23 @@
 	</mailingLists>
 
 	<scm>
-		<connection>scm:git:git://github.com/keisuke-ishihara/helloworldlearnathon</connection>
-		<developerConnection>scm:git:git@github.com:keisuke-ishihara/helloworldlearnathon</developerConnection>
+		<connection>scm:git:git://github.com/juglab/TemplateMatchingFijiPlugin</connection>
+		<developerConnection>scm:git:git@github.com/juglab/TemplateMatchingFijiPlugin</developerConnection>
 		<tag>HEAD</tag>
-		<url>https://github.com/keisuke-ishihara/helloworldlearnathon</url>
+		<url>https://github.com/juglab/TemplateMatchingFijiPlugin</url>
 	</scm>
 	<issueManagement>
 		<system>GitHub Issues</system>
-		<url>https://github.com/keisuke-ishihara/helloworldlearnathon/issues</url>
+		<url>https://github.com/mangalp/issues</url>
 	</issueManagement>
 	<ciManagement>
 		<system>None</system>
 	</ciManagement>
 
 	<properties>
-		<package-name>io.github.keisuke-ishihara.learnathon.command</package-name>
+		<package-name>io.github.juglab.templatematchingplugin.command</package-name>
 		<license.licenseName>Simplified BSD</license.licenseName>
-		<license.copyrightOwners>Keisuke Ishihara</license.copyrightOwners>
+		<license.copyrightOwners>mangal Prakash</license.copyrightOwners>
 	</properties>
 
 	<repositories>

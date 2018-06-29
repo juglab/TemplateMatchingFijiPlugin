@@ -25,6 +25,7 @@ public class TemplateMatchingPlugin implements Command {
 		instanceOfMine.run();
 	}
 
+	///Thius is to test out what is going on with my git commits 
 	@Override
 	public void run() {
 		final ImageJ ij = new ImageJ();

@@ -50,6 +50,7 @@ public class TemplateMatchingPlugin implements Command {
 		}
 	}
 
+//Testing what's wrong with my git
 	private < T extends RealType< T > > void runThrowsException() throws Exception {
 		final ImageJ ij = new ImageJ();
 		ij.ui().showUI();
@@ -166,7 +167,7 @@ public class TemplateMatchingPlugin implements Command {
 	}
 
 }
-
+//let's see
 //Mat a = cvTemplate.clone();
 //Mat bi = cvImage.clone();
 

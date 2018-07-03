@@ -19,9 +19,12 @@ import net.imagej.Dataset;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
 import net.imglib2.Cursor;
+import net.imglib2.Interval;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.RealRandomAccessible;
+import net.imglib2.algorithm.neighborhood.Neighborhood;
+import net.imglib2.algorithm.neighborhood.RectangleShape;
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.interpolation.randomaccess.NLinearInterpolatorFactory;
@@ -30,6 +33,7 @@ import net.imglib2.realtransform.AffineTransform2D;
 import net.imglib2.realtransform.RealViews;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.type.numeric.real.FloatType;
+import net.imglib2.util.Intervals;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
 
@@ -95,7 +99,7 @@ public class TemplateMatchingPlugin implements Command {
 		// Convert the image to OpenCV image
 		opencv_core.Mat cvImage = ic.convert( wrappedImage, Mat.class );
 
-		ArrayList detectionsPerTemplate = new ArrayList();
+		final ArrayList detectionsPerTemplate = new ArrayList();
 		ArrayList maximaPerTemplate = new ArrayList();
 		ArrayList anglePerTemplate = new ArrayList();
 
@@ -203,7 +207,12 @@ public class TemplateMatchingPlugin implements Command {
 		}
 
 
+		int radius = 1;
+		peakLocalMax( maxHitsIntensity, radius, detectionsPerTemplate );
+
 	}
+
+
 
 	private < T extends RealType< T > > RandomAccessibleInterval< T > rotateAndShow( final ImageJ ij, ImgPlus< T > img, int angle ) {
 		long x = -img.dimension( 0 ) / 2;
@@ -219,6 +228,33 @@ public class TemplateMatchingPlugin implements Command {
 		RandomAccessibleInterval< T > view = Views.interval( Views.raster( realview ), img );
 		ij.ui().show( view );
 		return(view);
+	}
+
+
+	private < T extends RealType< T > > ArrayList peakLocalMax(
+			RandomAccessibleInterval< T > source,
+			int radius,
+			ArrayList detectionsPerTemplate ) {
+		Interval interval = Intervals.expand( source, -1 );
+		source = Views.interval( source, interval );
+		final Cursor< T > center = Views.iterable( source ).cursor();
+		final RectangleShape shape = new RectangleShape( radius, true );
+		for ( final Neighborhood< T > localNeighborhood : shape.neighborhoods( source ) ) {
+			final T centerValue = center.next();
+			boolean isMaximum = true;
+			for ( final T value : localNeighborhood ) {
+				if ( centerValue.compareTo( value ) <= 0 ) {
+					isMaximum = false;
+					break;
+				}
+			}
+			if ( isMaximum ) {
+				detectionsPerTemplate.add( center );
+			}
+		}
+
+		return detectionsPerTemplate;
+
 	}
 
 }

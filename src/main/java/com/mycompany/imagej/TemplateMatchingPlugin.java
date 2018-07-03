@@ -99,7 +99,7 @@ public class TemplateMatchingPlugin implements Command {
 		// Convert the image to OpenCV image
 		opencv_core.Mat cvImage = ic.convert( wrappedImage, Mat.class );
 
-		final ArrayList detectionsPerTemplate = new ArrayList();
+		ArrayList detectionsPerTemplate = new ArrayList();
 		ArrayList maximaPerTemplate = new ArrayList();
 		ArrayList anglePerTemplate = new ArrayList();
 
@@ -208,7 +208,8 @@ public class TemplateMatchingPlugin implements Command {
 
 
 		int radius = 1;
-		peakLocalMax( maxHitsIntensity, radius, detectionsPerTemplate );
+		detectionsPerTemplate = peakLocalMax( maxHitsIntensity, radius, detectionsPerTemplate );
+		System.out.println( detectionsPerTemplate.size() );
 
 	}
 

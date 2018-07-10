@@ -4,7 +4,11 @@ import static org.bytedeco.javacpp.opencv_imgproc.TM_CCOEFF_NORMED;
 import static org.bytedeco.javacpp.opencv_imgproc.matchTemplate;
 
 import java.io.IOException;
+import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.opencv_core;
@@ -64,6 +68,11 @@ public class TemplateMatchingPlugin implements Command {
 		Dataset imagefile = ij.scifio().datasetIO().open( imagePathName );
 		ImgPlus< T > img = ( ImgPlus< T > ) imagefile.getImgPlus();
 
+		List detections = new ArrayList();
+		List maxima = new ArrayList();
+		List angles = new ArrayList();
+		double thresholdmatch = 0.3;
+
 		//Gaussian Smoothing of Image
 
 		double[] sigmas = { 1.5, 1.5 };
@@ -99,9 +108,9 @@ public class TemplateMatchingPlugin implements Command {
 		// Convert the image to OpenCV image
 		opencv_core.Mat cvImage = ic.convert( wrappedImage, Mat.class );
 
-		ArrayList detectionsPerTemplate = new ArrayList();
-		ArrayList maximaPerTemplate = new ArrayList();
-		ArrayList anglePerTemplate = new ArrayList();
+
+		List maximaPerTemplate = new ArrayList();
+		List anglePerTemplate = new ArrayList();
 
 		ImgPlus< T > maxHitsIntensity = img.copy();
 		LoopBuilder.setImages( maxHitsIntensity ).forEachPixel( pixel -> pixel.setZero() );
@@ -109,7 +118,7 @@ public class TemplateMatchingPlugin implements Command {
 		ImgPlus< T > maxHits = maxHitsIntensity.copy();
 		ImgPlus< T > maxHitsAngle = maxHitsIntensity.copy();
 
-		for ( int angle = 0; angle <= 60; angle = angle + 30 ) {
+		for ( int angle = 0; angle <= 30; angle = angle + 30 ) {
 			
 			//Rotate template
 			RandomAccessibleInterval< T > templateRot = rotateAndShow( ij, template, angle );
@@ -120,7 +129,7 @@ public class TemplateMatchingPlugin implements Command {
 			opencv_core.Mat cvSmoothImage = ic.convert( wrappedSmoothImage, Mat.class );
 			opencv_core.Mat tempResults = new opencv_core.Mat();
 
-			matchTemplate( cvImage, cvTemplate, tempResults, TM_CCOEFF_NORMED );
+			matchTemplate( cvImage, cvTemplate, tempResults, TM_CCOEFF_NORMED ); // I think images are unnormalized
 			Mat results = cvImage.clone();
 
 			//Setting all elements of results matrix to zero
@@ -151,6 +160,8 @@ public class TemplateMatchingPlugin implements Command {
 
 			Img< FloatType > resTimesIntensity = ImageJFunctions.convertFloat( mip.convert( resTimes, ImagePlus.class ) );
 			Img< FloatType > ijResults = ImageJFunctions.convertFloat( mip.convert( results, ImagePlus.class ) );
+
+			// Finding coordinates where resTimesIntensity is greater than a certain threshold(in this case 0.3)
 			ArrayList xhits = new ArrayList();
 			ArrayList yhits = new ArrayList();
 
@@ -158,25 +169,26 @@ public class TemplateMatchingPlugin implements Command {
 			int[] hitCoords = new int[ cursor.numDimensions() ];
 			while ( cursor.hasNext() ) {
 				cursor.fwd();
-				float intensity = cursor.get().getRealFloat();
-				if ( intensity >= 0.3 ) {
+				double intensity = cursor.get().getRealDouble();
+				if ( intensity >= thresholdmatch ) {
 					cursor.localize( hitCoords );
 					xhits.add( hitCoords[ 0 ] );
 					yhits.add( hitCoords[ 1 ] );
 				}
 			}
-			
+
 			System.out.println( xhits.size() );
-			for ( int i = 0; i < xhits.size(); i++ ) {
+//			for ( int i = 0; i < xhits.size(); i++ ) {
 //				System.out.println( xhits.get( i ) );
-			}
+//			}
+			RandomAccess< T > maxHitsIntensityAccessor = maxHitsIntensity.randomAccess();
+			RandomAccess< T > resTimesIntensityAccessor = ( RandomAccess< T > ) resTimesIntensity.randomAccess();
+			RandomAccess< T > maxHitsAccessor = maxHits.randomAccess();
+			RandomAccess< T > maxHitsAngleAccessor = maxHitsAngle.randomAccess();
+			RandomAccess< T > resultsAccessor = ( RandomAccess< T > ) ijResults.randomAccess();
 
 			for ( int i = 0; i < xhits.size(); i++ ) {
-				RandomAccess< T > maxHitsIntensityAccessor = maxHitsIntensity.randomAccess();
-				RandomAccess< T > resTimesIntensityAccessor = ( RandomAccess< T > ) resTimesIntensity.randomAccess();
-				RandomAccess< T > maxHitsAccessor = maxHits.randomAccess();
-				RandomAccess< T > maxHitsAngleAccessor = maxHitsAngle.randomAccess();
-				RandomAccess< T > resultsAccessor = ( RandomAccess< T > ) ijResults.randomAccess();
+
 
 				maxHitsIntensityAccessor.setPosition( ( int ) xhits.get( i ), 0 );
 				maxHitsIntensityAccessor.setPosition( ( int ) yhits.get( i ), 1 );
@@ -208,11 +220,44 @@ public class TemplateMatchingPlugin implements Command {
 
 
 		int radius = 1;
-		detectionsPerTemplate = peakLocalMax( maxHitsIntensity, radius, detectionsPerTemplate );
-		System.out.println( detectionsPerTemplate.size() );
+		Map< Integer, List > lists = peakLocalMax( maxHitsIntensity, radius );
+		List <Double>xDetectionsPerTemplate = lists.get( 1 );
+		List <Double>yDetectionsPerTemplate = lists.get( 2 );
+
+		List< Map.Entry > detectionsPerTemplate = new ArrayList<>( xDetectionsPerTemplate.size() );
+		if ( yDetectionsPerTemplate.size() == xDetectionsPerTemplate.size() ) {
+
+			for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
+				detectionsPerTemplate.add( new AbstractMap.SimpleEntry( xDetectionsPerTemplate.get( i ), yDetectionsPerTemplate.get( i ) ) );
+			}
+		}
+
+		System.out.println( xDetectionsPerTemplate.size() );
+//		for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
+//			Entry< Double, Double > entry = detectionsPerTemplate.get( i );
+//			System.out.println( entry );
+//		}
+
+		RandomAccess< T > maxHitsSecondaryAccessor = maxHits.randomAccess();
+		RandomAccess< T > maxHitsAngleSecondaryAccessor = maxHitsAngle.randomAccess();
+
+		for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
+			double xPoint = xDetectionsPerTemplate.get( i );
+			double ypoint = yDetectionsPerTemplate.get( i );
+			maxHitsSecondaryAccessor.setPosition( ( int ) xPoint, 0 );
+			maxHitsSecondaryAccessor.setPosition( ( int ) ypoint, 1 );
+			maxHitsAngleSecondaryAccessor.setPosition( ( int ) xPoint, 0 );
+			maxHitsAngleSecondaryAccessor.setPosition( ( int ) ypoint, 1 );
+			maximaPerTemplate.add( maxHitsSecondaryAccessor.get().getRealFloat() );
+			anglePerTemplate.add( maxHitsAngleSecondaryAccessor.get().getRealFloat() );
+
+		}
+		
+		detections.addAll( detectionsPerTemplate );
+		maxima.addAll( maximaPerTemplate );
+		angles.addAll( anglePerTemplate );
 
 	}
-
 
 
 	private < T extends RealType< T > > RandomAccessibleInterval< T > rotateAndShow( final ImageJ ij, ImgPlus< T > img, int angle ) {
@@ -232,10 +277,16 @@ public class TemplateMatchingPlugin implements Command {
 	}
 
 
-	private < T extends RealType< T > > ArrayList peakLocalMax(
+	private < T extends RealType< T > > Map< Integer, List > peakLocalMax(
 			RandomAccessibleInterval< T > source,
-			int radius,
-			ArrayList detectionsPerTemplate ) {
+			int radius ) {
+
+		Map< Integer, List > listMap = new HashMap< Integer, List >();
+		List xArray1 = new ArrayList();
+		List yArray1 = new ArrayList();
+		listMap.put( 1, xArray1 );
+		listMap.put( 2, yArray1 );
+
 		Interval interval = Intervals.expand( source, -1 );
 		source = Views.interval( source, interval );
 		final Cursor< T > center = Views.iterable( source ).cursor();
@@ -250,11 +301,13 @@ public class TemplateMatchingPlugin implements Command {
 				}
 			}
 			if ( isMaximum ) {
-				detectionsPerTemplate.add( center );
+
+				xArray1.add( ( double ) center.getIntPosition( 0 ) );
+				yArray1.add( ( double ) center.getIntPosition( 1 ) );
 			}
 		}
 
-		return detectionsPerTemplate;
+		return listMap;
 
 	}
 

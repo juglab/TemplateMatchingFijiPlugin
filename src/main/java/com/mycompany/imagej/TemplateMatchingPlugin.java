@@ -1,5 +1,7 @@
 package com.mycompany.imagej;
 
+import static org.bytedeco.javacpp.opencv_core.NORM_MINMAX;
+import static org.bytedeco.javacpp.opencv_core.normalize;
 import static org.bytedeco.javacpp.opencv_imgproc.TM_CCOEFF_NORMED;
 import static org.bytedeco.javacpp.opencv_imgproc.matchTemplate;
 
@@ -10,10 +12,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.bytedeco.javacpp.BytePointer;
 import org.bytedeco.javacpp.opencv_core;
 import org.bytedeco.javacpp.opencv_core.Mat;
-import org.bytedeco.javacpp.opencv_core.MatExpr;
 import org.scijava.command.Command;
 
 import ij.ImagePlus;
@@ -118,7 +118,7 @@ public class TemplateMatchingPlugin implements Command {
 		ImgPlus< T > maxHits = maxHitsIntensity.copy();
 		ImgPlus< T > maxHitsAngle = maxHitsIntensity.copy();
 
-		for ( int angle = 0; angle <= 30; angle = angle + 30 ) {
+		for ( int angle = 0; angle < 30; angle = angle + 30 ) {
 			
 			//Rotate template
 			RandomAccessibleInterval< T > templateRot = rotateAndShow( ij, template, angle );
@@ -127,45 +127,45 @@ public class TemplateMatchingPlugin implements Command {
 			// Convert the template to OpenCV image
 			opencv_core.Mat cvTemplate = ic.convert( rot, Mat.class );
 			opencv_core.Mat cvSmoothImage = ic.convert( wrappedSmoothImage, Mat.class );
-			opencv_core.Mat tempResults = new opencv_core.Mat();
+			opencv_core.Mat temporaryResults = new opencv_core.Mat();
 
-			matchTemplate( cvImage, cvTemplate, tempResults, TM_CCOEFF_NORMED ); // I think images are unnormalized
-			Mat results = cvImage.clone();
+			matchTemplate( cvImage, cvTemplate, temporaryResults, TM_CCOEFF_NORMED );
+			normalize( temporaryResults, temporaryResults, 0, 1, NORM_MINMAX, -1, new opencv_core.Mat() );
 
 			//Setting all elements of results matrix to zero
-
-			for ( int i = 0; i < results.arrayHeight(); i++ ) {
-				for ( int j = 0; j < results.arrayWidth(); j++ ) {
-					BytePointer zeroPtr = results.ptr( i, j );
-					zeroPtr.fill( 0 );
-
-				}
-			}
-
+			ImgPlus< T > results = img.copy();
+			LoopBuilder.setImages( results ).forEachPixel( pixel -> pixel.setZero() );
+			
+			Img< FloatType > tempResults = ImageJFunctions.convertFloat( mip.convert(temporaryResults, ImagePlus.class ) );
+			RandomAccess< FloatType > subMatrixAccessor = tempResults.randomAccess();
+			RandomAccess< T > matrixAccessor = results.randomAccess();
+			
 			//Replacing the submatrix within results matrix with template matching results matrix
 
-			for ( int i = padHFrom; i < padHTo; i++ ) {
-				for ( int j = padWFrom; j < padWTo; j++ ) {
-					BytePointer resultsPtr = results.ptr( i, j );
-					BytePointer tempResultsPtr = tempResults.ptr( i - padHFrom, j - padWFrom );
-					resultsPtr.fill( tempResultsPtr.get() );
-
+			for (int i =padHFrom; i< padHTo; i++) {
+				for (int j = padWFrom; j < padWTo; j++) {
+					matrixAccessor.setPosition( i, 0);
+					matrixAccessor.setPosition( j, 1 );
+					subMatrixAccessor.setPosition( i-padHFrom, 0 );
+					subMatrixAccessor.setPosition( j-padWFrom, 1 );
+					
+					matrixAccessor.get().setReal( subMatrixAccessor.get().getRealDouble() );
 				}
-			}
+					
+				}
+			
+			ImgPlus< T > resCopy = results.copy();
 
 			//Counteracting normalizedness of template matching by multiplying with the smoothed image intensity of raw image
+			LoopBuilder.setImages( imgSmooth, results ).forEachPixel( ( a, b ) -> {
+				b.mul( a.getRealDouble() );
+			} );
 
-			MatExpr prod = results.mul( cvSmoothImage );
-			Mat resTimes = prod.asMat();
-
-			Img< FloatType > resTimesIntensity = ImageJFunctions.convertFloat( mip.convert( resTimes, ImagePlus.class ) );
-			Img< FloatType > ijResults = ImageJFunctions.convertFloat( mip.convert( results, ImagePlus.class ) );
-
-			// Finding coordinates where resTimesIntensity is greater than a certain threshold(in this case 0.3)
+			// Finding coordinates where results is greater than a certain threshold(in this case 0.3)
 			ArrayList xhits = new ArrayList();
 			ArrayList yhits = new ArrayList();
 
-			Cursor< FloatType > cursor = resTimesIntensity.cursor();
+			Cursor< T > cursor = results.cursor();
 			int[] hitCoords = new int[ cursor.numDimensions() ];
 			while ( cursor.hasNext() ) {
 				cursor.fwd();
@@ -177,18 +177,18 @@ public class TemplateMatchingPlugin implements Command {
 				}
 			}
 
-			System.out.println( xhits.size() );
+//			System.out.println( xhits.size() );
 //			for ( int i = 0; i < xhits.size(); i++ ) {
 //				System.out.println( xhits.get( i ) );
 //			}
+
 			RandomAccess< T > maxHitsIntensityAccessor = maxHitsIntensity.randomAccess();
-			RandomAccess< T > resTimesIntensityAccessor = ( RandomAccess< T > ) resTimesIntensity.randomAccess();
+			RandomAccess< T > resTimesIntensityAccessor = results.randomAccess();
 			RandomAccess< T > maxHitsAccessor = maxHits.randomAccess();
 			RandomAccess< T > maxHitsAngleAccessor = maxHitsAngle.randomAccess();
-			RandomAccess< T > resultsAccessor = ( RandomAccess< T > ) ijResults.randomAccess();
+			RandomAccess< T > resultsAccessor = resCopy.randomAccess();
 
 			for ( int i = 0; i < xhits.size(); i++ ) {
-
 
 				maxHitsIntensityAccessor.setPosition( ( int ) xhits.get( i ), 0 );
 				maxHitsIntensityAccessor.setPosition( ( int ) yhits.get( i ), 1 );
@@ -209,53 +209,68 @@ public class TemplateMatchingPlugin implements Command {
 				}
 			}
 
-//				float a = cursor.get().getRealFloat();
-//				if ( a > 0.3 ) {
-//					hits.add( cursor.get().getIndex() );
-//				}
+			//Peak Local Maximum detection
 
-			
+			int radius = 1;
+			Map< Integer, List > lists = peakLocalMax( maxHitsIntensity, radius );
+			List< Double > xDetectionsPerTemplate = lists.get( 1 );
+			List< Double > yDetectionsPerTemplate = lists.get( 2 );
 
-		}
+			List< Map.Entry > detectionsPerTemplate = new ArrayList<>( xDetectionsPerTemplate.size() );
+			if ( yDetectionsPerTemplate.size() == xDetectionsPerTemplate.size() ) {
 
+				for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
+					detectionsPerTemplate.add( new AbstractMap.SimpleEntry( xDetectionsPerTemplate.get( i ), yDetectionsPerTemplate.get( i ) ) );
+				}
+			}
 
-		int radius = 1;
-		Map< Integer, List > lists = peakLocalMax( maxHitsIntensity, radius );
-		List <Double>xDetectionsPerTemplate = lists.get( 1 );
-		List <Double>yDetectionsPerTemplate = lists.get( 2 );
+			System.out.println( xDetectionsPerTemplate.size() );
 
-		List< Map.Entry > detectionsPerTemplate = new ArrayList<>( xDetectionsPerTemplate.size() );
-		if ( yDetectionsPerTemplate.size() == xDetectionsPerTemplate.size() ) {
+//			for ( int i = 0; i < 10; i++ ) {
+//				Entry< Double, Double > entry = detectionsPerTemplate.get( i );
+//				System.out.println( entry );
+//			}
+
+			RandomAccess< T > maxHitsSecondaryAccessor = maxHits.randomAccess();
+			RandomAccess< T > maxHitsAngleSecondaryAccessor = maxHitsAngle.randomAccess();
 
 			for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
-				detectionsPerTemplate.add( new AbstractMap.SimpleEntry( xDetectionsPerTemplate.get( i ), yDetectionsPerTemplate.get( i ) ) );
+				double xPoint = xDetectionsPerTemplate.get( i );
+				double ypoint = yDetectionsPerTemplate.get( i );
+				maxHitsSecondaryAccessor.setPosition( ( int ) xPoint, 0 );
+				maxHitsSecondaryAccessor.setPosition( ( int ) ypoint, 1 );
+				maxHitsAngleSecondaryAccessor.setPosition( ( int ) xPoint, 0 );
+				maxHitsAngleSecondaryAccessor.setPosition( ( int ) ypoint, 1 );
+				maximaPerTemplate.add( maxHitsSecondaryAccessor.get().getRealFloat() );
+				anglePerTemplate.add( maxHitsAngleSecondaryAccessor.get().getRealFloat() );
+
+			}
+
+			detections.addAll( detectionsPerTemplate );
+			maxima.addAll( maximaPerTemplate );
+			angles.addAll( anglePerTemplate );
+
+			for ( int j = 0; j < 10; j++ ) {
+				System.out.println( maxima.get( j ) );
 			}
 		}
 
-		System.out.println( xDetectionsPerTemplate.size() );
-//		for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
-//			Entry< Double, Double > entry = detectionsPerTemplate.get( i );
-//			System.out.println( entry );
+			//Test code begins
+
+//			RandomAccess< T > testAccessor = results.randomAccess();
+//			for ( int i = 0; i < results.dimension( 0 ); i++ ) {
+//				for ( int j = 0; j < results.dimension( 1 ); j++ ) {
+//					testAccessor.setPosition( i, 0 );
+//					testAccessor.setPosition( j, 1 );
+//					System.out.println( testAccessor.get().getRealDouble() );
+//				}
+//
+//			}
+//
 //		}
-
-		RandomAccess< T > maxHitsSecondaryAccessor = maxHits.randomAccess();
-		RandomAccess< T > maxHitsAngleSecondaryAccessor = maxHitsAngle.randomAccess();
-
-		for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
-			double xPoint = xDetectionsPerTemplate.get( i );
-			double ypoint = yDetectionsPerTemplate.get( i );
-			maxHitsSecondaryAccessor.setPosition( ( int ) xPoint, 0 );
-			maxHitsSecondaryAccessor.setPosition( ( int ) ypoint, 1 );
-			maxHitsAngleSecondaryAccessor.setPosition( ( int ) xPoint, 0 );
-			maxHitsAngleSecondaryAccessor.setPosition( ( int ) ypoint, 1 );
-			maximaPerTemplate.add( maxHitsSecondaryAccessor.get().getRealFloat() );
-			anglePerTemplate.add( maxHitsAngleSecondaryAccessor.get().getRealFloat() );
-
-		}
 		
-		detections.addAll( detectionsPerTemplate );
-		maxima.addAll( maximaPerTemplate );
-		angles.addAll( anglePerTemplate );
+
+			//Test code ends
 
 	}
 

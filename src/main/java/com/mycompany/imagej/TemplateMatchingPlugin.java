@@ -29,6 +29,7 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.RealRandomAccessible;
 import net.imglib2.algorithm.neighborhood.Neighborhood;
 import net.imglib2.algorithm.neighborhood.RectangleShape;
+import net.imglib2.algorithm.region.hypersphere.HyperSphere;
 import net.imglib2.img.Img;
 import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.interpolation.randomaccess.NLinearInterpolatorFactory;
@@ -44,7 +45,6 @@ import net.imglib2.view.Views;
 public class TemplateMatchingPlugin implements Command {
 
 	private static final double pi = 3.14;
-	private static final String SetZero = null;
 
 	public static void main( String[] args ) throws IOException {
 		TemplateMatchingPlugin instanceOfMine = new TemplateMatchingPlugin();
@@ -68,6 +68,7 @@ public class TemplateMatchingPlugin implements Command {
 		Dataset imagefile = ij.scifio().datasetIO().open( imagePathName );
 		ImgPlus< T > img = ( ImgPlus< T > ) imagefile.getImgPlus();
 
+		ImgPlus< T > display = img.copy();
 		List detections = new ArrayList();
 		List maxima = new ArrayList();
 		List angles = new ArrayList();
@@ -114,6 +115,8 @@ public class TemplateMatchingPlugin implements Command {
 
 		ImgPlus< T > maxHitsIntensity = img.copy();
 		LoopBuilder.setImages( maxHitsIntensity ).forEachPixel( pixel -> pixel.setZero() );
+
+		ImgPlus< T > drawImage = maxHitsIntensity.copy(); //Output segmentation image
 
 		ImgPlus< T > maxHits = maxHitsIntensity.copy();
 		ImgPlus< T > maxHitsAngle = maxHitsIntensity.copy();
@@ -250,9 +253,24 @@ public class TemplateMatchingPlugin implements Command {
 			maxima.addAll( maximaPerTemplate );
 			angles.addAll( anglePerTemplate );
 
-			for ( int j = 0; j < 10; j++ ) {
-				System.out.println( maxima.get( j ) );
+			/// Draw segmentations
+
+			RandomAccess< T > drawingAccessor = drawImage.randomAccess();
+			for ( int i = 0; i < detections.size(); i++ ) {
+				double xDrawPoint = xDetectionsPerTemplate.get( i );
+				double yDrawPoint = yDetectionsPerTemplate.get( i );
+				drawingAccessor.setPosition( ( int ) xDrawPoint, 0 );
+				drawingAccessor.setPosition( ( int ) yDrawPoint, 1 );
+
+				HyperSphere< T > hyperSphere = new HyperSphere<>( drawImage, drawingAccessor, 1 );
+				// set every value inside the sphere to 1
+				for ( T value : hyperSphere )
+					value.setOne();
 			}
+				
+				
+
+			ij.ui().show( drawImage );
 		}
 
 			//Test code begins
@@ -299,6 +317,7 @@ public class TemplateMatchingPlugin implements Command {
 		Map< Integer, List > listMap = new HashMap< Integer, List >();
 		List xArray1 = new ArrayList();
 		List yArray1 = new ArrayList();
+		List centerList = new ArrayList();
 		listMap.put( 1, xArray1 );
 		listMap.put( 2, yArray1 );
 
@@ -319,6 +338,7 @@ public class TemplateMatchingPlugin implements Command {
 
 				xArray1.add( ( double ) center.getIntPosition( 0 ) );
 				yArray1.add( ( double ) center.getIntPosition( 1 ) );
+				centerList.add( centerValue );
 			}
 		}
 

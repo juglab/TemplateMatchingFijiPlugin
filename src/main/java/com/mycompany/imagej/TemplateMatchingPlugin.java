@@ -90,10 +90,10 @@ public class TemplateMatchingPlugin implements Command {
 		ImgPlus< T > templateFirst = ( ImgPlus< T > ) templatefile.getImgPlus();
 		templateBucket.add( templateFirst );
 
-//		String templatePathNameSecond = "/Users/prakash/Desktop/raw_untemp2.tif";
-//		Dataset templatefileSecond = ij.scifio().datasetIO().open( templatePathNameSecond );
-//		ImgPlus< T > templateSecond = ( ImgPlus< T > ) templatefileSecond.getImgPlus();
-//		templateBucket.add( templateSecond );
+		String templatePathNameSecond = "/Users/prakash/Desktop/raw_untemp2.tif";
+		Dataset templatefileSecond = ij.scifio().datasetIO().open( templatePathNameSecond );
+		ImgPlus< T > templateSecond = ( ImgPlus< T > ) templatefileSecond.getImgPlus();
+		templateBucket.add( templateSecond );
 
 		double thresholdmatch = 0.3;
 
@@ -256,7 +256,7 @@ public class TemplateMatchingPlugin implements Command {
 					}
 				}
 
-				System.out.println( xDetectionsPerTemplate.size() );
+//				System.out.println( xDetectionsPerTemplate.size() );
 				System.out.println( detectionsPerTemplate.size() );
 
 				RandomAccess< T > maxHitsSecondaryAccessor = maxHits.randomAccess();

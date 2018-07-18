@@ -25,6 +25,7 @@ import net.imagej.ImgPlus;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
+import net.imglib2.algorithm.region.hypersphere.HyperSphere;
 import net.imglib2.img.Img;
 import net.imglib2.img.ImgView;
 import net.imglib2.img.array.ArrayImgFactory;
@@ -76,9 +77,13 @@ public class TemplateMatchingPlugin implements Command {
 
 
 		double thresholdmatch = 0.3;
+		ArrayList multiTimeStack = new ArrayList<>();
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
 
+			List detections = new ArrayList();
+			List xDetections = new ArrayList();
+			List yDetections = new ArrayList();
 			List maximaPerTemplate = new ArrayList();
 			List anglePerTemplate = new ArrayList();
 
@@ -104,7 +109,7 @@ public class TemplateMatchingPlugin implements Command {
 
 			//Normalizing the image
 			LoopBuilder.setImages( imgSmooth ).forEachPixel( pixel -> pixel.mul( inverse ) );
-			ij.ui().show( imgSmooth );
+//			ij.ui().show( imgSmooth );
 
 			//Converters
 			ImagePlusMatConverter ic = new ImagePlusMatConverter();
@@ -249,68 +254,78 @@ public class TemplateMatchingPlugin implements Command {
 				anglePerTemplate.add( maxHitsAngleSecondaryAccessor.get().getRealFloat() );
 
 			}
-
-
-//				/// Draw segmentations
-
-//				RandomAccess< T > drawingAccessor = drawImage.randomAccess();
-//				for ( int i = 0; i < detections.size(); i++ ) {
-//					double xDrawPoint = xDetectionsPerTemplate.get( i );
-//					double yDrawPoint = yDetectionsPerTemplate.get( i );
-//					drawingAccessor.setPosition( ( int ) xDrawPoint, 0 );
-//					drawingAccessor.setPosition( ( int ) yDrawPoint, 1 );
-//
-//					HyperSphere< T > hyperSphere = new HyperSphere<>( drawImage, drawingAccessor, 1 );
-//						// set every value inside the sphere to 1
-//					for ( T value : hyperSphere )
-//							value.setOne();
-//				}
-//
-//				ij.ui().show( drawImage );
+			detections.addAll( detectionsPerTemplate );
+			xDetections.addAll( xDetectionsPerTemplate );
+			yDetections.addAll( yDetectionsPerTemplate );
 
 			System.out.println( "done!" );
 
 			List segImagesBucket = new ArrayList();
 			int drawSegRadius = 4;
-			Img< T > intersectingSegs = img.copy();
-			LoopBuilder.setImages( intersectingSegs ).forEachPixel( pixel -> pixel.setZero() );
-
 			//Create a list of all zeros to track which coordinates have been plotted
-			List< Integer > done = new ArrayList< Integer >( Collections.nCopies( detectionsPerTemplate.size(), 0 ) );
+			List< Integer > done = new ArrayList< Integer >( Collections.nCopies( detections.size(), 0 ) );
 
-			for ( int i = 0; i < detectionsPerTemplate.size(); i++ ) {
-				if ( done.get( i ) == 1 ) {
-					continue;
-				}
+			boolean repeat = true;
+			while ( repeat ) {
 
-				double fromRow = xDetectionsPerTemplate.get( i ) - drawSegRadius;
-				double toRow = xDetectionsPerTemplate.get( i ) + drawSegRadius;
-				double fromCol = yDetectionsPerTemplate.get( i ) - drawSegRadius;
-				double toCol = yDetectionsPerTemplate.get( i ) + drawSegRadius;
+				repeat = false;
+				Img< T > segImage = img.copy();
+				LoopBuilder.setImages( segImage ).forEachPixel( pixel -> pixel.setZero() );
 
-				double searchMax = 0;
-				RandomAccess< T > intersectingSegsAccessor = intersectingSegs.randomAccess();
+				for ( int i = 0; i < detections.size(); i++ ) {
 
-				for ( double row = fromRow; row < toRow; row++ ) {
-					for ( double col = fromCol; col < toCol; col++ ) {
-						intersectingSegsAccessor.setPosition( ( int ) row, 0 );
-						intersectingSegsAccessor.setPosition( ( int ) col, 1 );
-						if ( intersectingSegsAccessor.get().getRealDouble() > 0 ) {
-							searchMax = intersectingSegsAccessor.get().getRealDouble();
+					if ( done.get( i ) == 1 ) {
+
+						continue;
+					}
+
+					int fromRow = ( int ) ( xDetectionsPerTemplate.get( i ) - drawSegRadius );
+					int toRow = ( int ) ( xDetectionsPerTemplate.get( i ) + drawSegRadius );
+					int fromCol = ( int ) ( yDetectionsPerTemplate.get( i ) - drawSegRadius );
+					int toCol = ( int ) ( yDetectionsPerTemplate.get( i ) + drawSegRadius );
+
+					double searchMax = 0;
+					RandomAccess< T > intersectingSegsAccessor = segImage.randomAccess();
+
+					for ( int row = fromRow; row < toRow; row++ ) {
+						for ( int col = fromCol; col < toCol; col++ ) {
+							intersectingSegsAccessor.setPosition( row, 0 );
+							intersectingSegsAccessor.setPosition( col, 1 );
+							if ( intersectingSegsAccessor.get().getRealDouble() > 0 ) {
+								searchMax = intersectingSegsAccessor.get().getRealDouble();
+							}
 						}
 					}
-				}
-				if ( searchMax == 0 ) {
-					//Draw segmentation circle of radius drawSegRadius on intersectingSegs and set
-					//done.get(i) ==1
-				}
-			}
+					if ( searchMax == 0 ) {
 
-		}
+						//Draw segmentation circle of radius drawSegRadius on intersectingSegs and set
+						//done.get(i) ==1
+						RandomAccess< T > drawingAccessor = segImage.randomAccess();
+						double xDrawPoint = xDetectionsPerTemplate.get( i );
+						double yDrawPoint = yDetectionsPerTemplate.get( i );
+						drawingAccessor.setPosition( ( int ) xDrawPoint, 0 );
+						drawingAccessor.setPosition( ( int ) yDrawPoint, 1 );
+						HyperSphere< T > hyperSphere = new HyperSphere<>( segImage, drawingAccessor, drawSegRadius );
+						// set every value inside the sphere to 1
+						for ( T value : hyperSphere ) {
+							value.setOne();
+						}
+						done.set( i, 1 );
+						repeat = true;
 
-	}
+					} //If loop
 
+				} // detections for loop
 
+				if ( repeat ) {
+					segImagesBucket.add( segImage );
+				} // If repeat loop
 
+			} // while repeat loop
+			ij.ui().show( Views.stack( segImagesBucket ) );
+			multiTimeStack.addAll( segImagesBucket );
 
-}
+		}  //Image Loop
+	}  //runThrowsException Method loop
+
+} // CommandPlugin Loop

@@ -8,6 +8,7 @@ import static org.bytedeco.javacpp.opencv_imgproc.matchTemplate;
 import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +68,6 @@ public class TemplateMatchingPlugin implements Command {
 		final ImageJ ij = new ImageJ();
 		ij.ui().showUI();
 
-		//String imagePathName = "/Users/prakash/Desktop/image_time#00000.tif";
 		String imagePathName = "/Users/prakash/Desktop/BeetlesDataAndResults/Tr2D10time/raw.tif";
 		Dataset imagefile = ij.scifio().datasetIO().open( imagePathName );
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
@@ -100,6 +100,8 @@ public class TemplateMatchingPlugin implements Command {
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
 
 			List detections = new ArrayList();
+			List xDetections = new ArrayList();
+			List yDetections = new ArrayList();
 			List maxima = new ArrayList();
 			List angles = new ArrayList();
 
@@ -107,9 +109,10 @@ public class TemplateMatchingPlugin implements Command {
 			RandomAccessibleInterval< T > raiImg = imageBucket.get( imageNumber );
 			T t = Util.getTypeFromInterval( raiImg );
 			Img< T > img = ImgView.wrap( raiImg, new ArrayImgFactory<>( t ) );
-			ImgPlus< T > imgPlus = new ImgPlus<>( img );
-			ArrayImgFactory< T > factory = new ArrayImgFactory<>( t );
-			factory.create( 10, 10 );
+			Img< T > imgCopy = img.copy();
+//			ImgPlus< T > imgPlus = new ImgPlus<>( img );
+//			ArrayImgFactory< T > factory = new ArrayImgFactory<>( t );
+//			factory.create( 10, 10 );
 			//			ImgPlus img = ( ImgPlus ) ImageJFunctions.wrapFloat( ImageJFunctions.show( raiImg ) );
 
 
@@ -243,6 +246,7 @@ public class TemplateMatchingPlugin implements Command {
 				//Peak Local Maximum detection
 
 				int radius = 1;
+
 				Map< Integer, List > lists = peakLocalMax( maxHitsIntensity, radius );
 				List< Double > xDetectionsPerTemplate = lists.get( 1 );
 				List< Double > yDetectionsPerTemplate = lists.get( 2 );
@@ -272,12 +276,14 @@ public class TemplateMatchingPlugin implements Command {
 					maximaPerTemplate.add( maxHitsSecondaryAccessor.get().getRealFloat() );
 					anglePerTemplate.add( maxHitsAngleSecondaryAccessor.get().getRealFloat() );
 
-					}
-
+				}
+//
 				detections.addAll( detectionsPerTemplate );
+				xDetections.addAll( xDetectionsPerTemplate );
+				yDetections.addAll( yDetectionsPerTemplate );
 				maxima.addAll( maximaPerTemplate );
 				angles.addAll( anglePerTemplate );
-
+				System.out.println( detections.size() );
 //
 //				/// Draw segmentations
 //
@@ -298,6 +304,42 @@ public class TemplateMatchingPlugin implements Command {
 
 			}
 			System.out.println( "done!" );
+
+			List segImagesBucket = new ArrayList();
+			int drawSegRadius = 4;
+			Img< T > intersectingSegs = img.copy();
+			LoopBuilder.setImages( intersectingSegs).forEachPixel( pixel -> pixel.setZero() );
+			
+			//Create a list of all zeros to track which coordinates have been plotted
+			List< Integer > done = new ArrayList< Integer >( Collections.nCopies( detections.size(), 0 ) );
+
+			for ( int i = 0; i < detections.size(); i++ ) {
+				if ( done.get( i ) == 1 ) {
+					continue;
+				}
+				
+				int fromRow = ( int ) xDetections.get( i ) - drawSegRadius;
+				int toRow = ( int ) xDetections.get( i ) + drawSegRadius;
+				int fromCol = ( int ) yDetections.get( i ) - drawSegRadius;
+				int toCol = ( int ) yDetections.get( i ) + drawSegRadius;
+				
+				double searchMax = 0;
+				RandomAccess< T > intersectingSegsAccessor = intersectingSegs.randomAccess();
+
+				for ( int row = fromRow; row < toRow; row++ ) {
+					for ( int col = fromCol; col < toCol; col++ ) {
+						intersectingSegsAccessor.setPosition( row, 0 );
+						intersectingSegsAccessor.setPosition( col, 1 );
+						if ( intersectingSegsAccessor.get().getRealDouble() > 0 ) {
+							searchMax = intersectingSegsAccessor.get().getRealDouble();
+						}
+					}
+				}
+				if ( searchMax == 0 ) {
+					//Draw segmentation circle of radius drawSegRadius on intersectingSegs and set
+					//done.get(i) ==1
+				}
+			}
 
 		}
 
@@ -358,5 +400,6 @@ public class TemplateMatchingPlugin implements Command {
 //		ij.ui().show( view );
 		return ( view );
 	}
+
 
 }

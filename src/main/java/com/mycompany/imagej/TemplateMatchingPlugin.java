@@ -58,9 +58,11 @@ public class TemplateMatchingPlugin implements Command {
 		final ImageJ ij = new ImageJ();
 		ij.ui().showUI();
 
-		String imagePathName = "/Users/prakash/Desktop/BeetlesDataAndResults/Tr2D10time/raw.tif";
+//		String imagePathName = "/Users/prakash/Desktop/BeetlesDataAndResults/Tr2D10time/raw.tif";
+		String imagePathName = "/Users/prakash/Desktop/sampleraw.tif";
 		Dataset imagefile = ij.scifio().datasetIO().open( imagePathName );
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
+		
 
 		//Split the image movie in 2D images and store them in list
 		final List< RandomAccessibleInterval< T > > imageBucket =
@@ -77,7 +79,8 @@ public class TemplateMatchingPlugin implements Command {
 
 
 		double thresholdmatch = 0.3;
-		ArrayList multiTimeStack = new ArrayList<>();
+		List multiTimeStack = new ArrayList();
+		int maxStackSize = 0;
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
 
@@ -86,6 +89,7 @@ public class TemplateMatchingPlugin implements Command {
 			List yDetections = new ArrayList();
 			List maximaPerTemplate = new ArrayList();
 			List anglePerTemplate = new ArrayList();
+
 
 			//Gaussian Smoothing of Image
 			RandomAccessibleInterval< T > raiImg = imageBucket.get( imageNumber );
@@ -101,7 +105,7 @@ public class TemplateMatchingPlugin implements Command {
 
 			double[] sigmas = { 1.5, 1.5 };
 			RandomAccessibleInterval< FloatType > imgSmooth = ij.op().filter().gauss( raiImg, sigmas );
-			System.out.println( Util.getTypeFromInterval( imgSmooth ).getClass() );
+//			System.out.println( Util.getTypeFromInterval( imgSmooth ).getClass() );
 
 			FloatType maxVal = new FloatType();
 			ij.op().stats().max( maxVal, Views.iterable( imgSmooth ) );
@@ -237,8 +241,7 @@ public class TemplateMatchingPlugin implements Command {
 				}
 			}
 
-//				System.out.println( xDetectionsPerTemplate.size() );
-			System.out.println( detectionsPerTemplate.size() );
+//			System.out.println( detectionsPerTemplate.size() );
 
 			RandomAccess< T > maxHitsSecondaryAccessor = maxHits.randomAccess();
 			RandomAccess< T > maxHitsAngleSecondaryAccessor = maxHitsAngle.randomAccess();
@@ -319,13 +322,49 @@ public class TemplateMatchingPlugin implements Command {
 
 				if ( repeat ) {
 					segImagesBucket.add( segImage );
+					int stackSize = segImagesBucket.size();
+					if(stackSize > maxStackSize ) {
+						maxStackSize = stackSize;
+					}
+
 				} // If repeat loop
 
 			} // while repeat loop
-			ij.ui().show( Views.stack( segImagesBucket ) );
-			multiTimeStack.addAll( segImagesBucket );
+			RandomAccessibleInterval oneTimeStack = Views.stack( segImagesBucket );
+			multiTimeStack.add( oneTimeStack );
 
 		}  //Image Loop
+
+//		int imageDimensions = imp.numDimensions();
+//		if ( imageDimensions == 2 || imageDimensions == 3 ) {
+//			long xDim = imp.dimension( 0 );
+//			long yDim = imp.dimension( 1 );
+//			int[] dimensions = { ( int ) xDim, ( int ) yDim };
+//			Img< T > blankImage = imp.getImg().factory().create( dimensions );
+//			ij.ui().show( blankImage );
+//		} else {
+//			System.out.println( "Invalid Image Dimensions! Please use only 2D or 3D image as input" );
+//		}
+		RandomAccessibleInterval trueSegmentation = null;
+		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ), 1 };
+		RandomAccessibleInterval< T > blankImage = imp.getImg().factory().create( blankImDims );
+
+		for ( int index = 0; index < maxStackSize; index++ ) {
+			ArrayList trueSegImageBucket = new ArrayList();
+			for ( int k = 0; k < multiTimeStack.size(); k++ ) {
+				RandomAccessibleInterval singleStack = ( RandomAccessibleInterval ) multiTimeStack.get( k );
+				if ( index >= singleStack.dimension( 2 ) ) {
+					trueSegImageBucket.add( blankImage );
+				}
+				else {
+					RandomAccessibleInterval hyperslice = Views.hyperSlice( singleStack, 2, index );
+
+					trueSegImageBucket.add( hyperslice );
+				}
+				trueSegmentation = Views.stack( trueSegImageBucket );
+			}
+			ij.ui().show( trueSegmentation );
+		}
 	}  //runThrowsException Method loop
 
 } // CommandPlugin Loop

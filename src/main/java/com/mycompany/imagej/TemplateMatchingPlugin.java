@@ -5,6 +5,7 @@ import static org.bytedeco.javacpp.opencv_core.normalize;
 import static org.bytedeco.javacpp.opencv_imgproc.TM_CCOEFF_NORMED;
 import static org.bytedeco.javacpp.opencv_imgproc.matchTemplate;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.AbstractMap;
 import java.util.ArrayList;
@@ -58,6 +59,9 @@ public class TemplateMatchingPlugin implements Command {
 	DatasetIOService io;
 
 //	@Parameter
+//	Dataset currentData;
+
+//	@Parameter
 //	String imagePathName;
 
 	public static void main( String[] args ) throws IOException {
@@ -79,10 +83,18 @@ public class TemplateMatchingPlugin implements Command {
 		final ImageJ ij = new ImageJ();
 		ij.ui().showUI();
 
-		String imagePathName = "/Users/prakash/Desktop/BeetlesDataAndResults/Tr2D10time/raw.tif";
+		File imageFile = ij.ui().chooseFile( null, "open" );
+		File templateFile = ij.ui().chooseFile( null, "open" );
+
+
+//		String imagePathName = "/Users/prakash/Desktop/BeetlesDataAndResults/Tr2D10time/raw.tif";
 //		String imagePathName = "/Users/prakash/Desktop/sampleraw.tif";
-		Dataset imagefile = ij.scifio().datasetIO().open( imagePathName );
+
+		Dataset imagefile = ij.scifio().datasetIO().open( imageFile.getPath() );
+//		Dataset imagefile = ij.scifio().datasetIO().open( imagePathName );
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
+
+//		ImgPlus< T > imp = ( ImgPlus< T > ) currentData.getImgPlus();
 		
 
 		//Split the image movie in 2D images and store them in list
@@ -94,8 +106,9 @@ public class TemplateMatchingPlugin implements Command {
 		}
 
 		//Load template 
-		String templatePathName = "/Users/prakash/Desktop/raw_untemp2.tif";
-		Dataset templatefile = ij.scifio().datasetIO().open( templatePathName );
+//		String templatePathName = "/Users/prakash/Desktop/raw_untemp2.tif";
+		Dataset templatefile = ij.scifio().datasetIO().open( templateFile.getPath() );
+//		Dataset templatefile = ij.scifio().datasetIO().open( templatePathName );
 		ImgPlus< T > template = ( ImgPlus< T > ) templatefile.getImgPlus();
 
 
@@ -377,7 +390,8 @@ public class TemplateMatchingPlugin implements Command {
 			}
 			ij.ui().show( trueSegmentation );
 			ImagePlus segPlus = ImageJFunctions.wrap( trueSegmentation, null );
-			String savePathName = "/Users/prakash/Desktop/sampleTemplateMatching/" + String.valueOf( index ) + ".tif";
+			String strIndex = String.valueOf( index );
+			String savePathName = "/Users/prakash/Desktop/sampleTemplateMatching/" + strIndex + ".tif";
 			IJ.save( segPlus, savePathName );
 
 //			ij.scifio().datasetIO().save( ds.create( trueSegmentation ), savePathName );

@@ -15,11 +15,15 @@ import java.util.Map;
 import org.bytedeco.javacpp.opencv_core;
 import org.bytedeco.javacpp.opencv_core.Mat;
 import org.scijava.command.Command;
+import org.scijava.plugin.Parameter;
 
+import ij.IJ;
 import ij.ImagePlus;
 import ijopencv.ij.ImagePlusMatConverter;
 import ijopencv.opencv.MatImagePlusConverter;
+import io.scif.services.DatasetIOService;
 import net.imagej.Dataset;
+import net.imagej.DatasetService;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
 import net.imglib2.Cursor;
@@ -38,6 +42,12 @@ import net.imglib2.util.Util;
 import net.imglib2.view.Views;
 
 public class TemplateMatchingPlugin implements Command {
+
+	@Parameter
+	DatasetService ds;
+
+	@Parameter
+	DatasetIOService io;
 
 	public static void main( String[] args ) throws IOException {
 		TemplateMatchingPlugin instanceOfMine = new TemplateMatchingPlugin();
@@ -241,8 +251,6 @@ public class TemplateMatchingPlugin implements Command {
 				}
 			}
 
-//			System.out.println( detectionsPerTemplate.size() );
-
 			RandomAccess< T > maxHitsSecondaryAccessor = maxHits.randomAccess();
 			RandomAccess< T > maxHitsAngleSecondaryAccessor = maxHitsAngle.randomAccess();
 
@@ -335,16 +343,6 @@ public class TemplateMatchingPlugin implements Command {
 
 		}  //Image Loop
 
-//		int imageDimensions = imp.numDimensions();
-//		if ( imageDimensions == 2 || imageDimensions == 3 ) {
-//			long xDim = imp.dimension( 0 );
-//			long yDim = imp.dimension( 1 );
-//			int[] dimensions = { ( int ) xDim, ( int ) yDim };
-//			Img< T > blankImage = imp.getImg().factory().create( dimensions );
-//			ij.ui().show( blankImage );
-//		} else {
-//			System.out.println( "Invalid Image Dimensions! Please use only 2D or 3D image as input" );
-//		}
 		RandomAccessibleInterval trueSegmentation = null;
 		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ), 1 };
 		RandomAccessibleInterval< T > blankImage = imp.getImg().factory().create( blankImDims );
@@ -364,6 +362,12 @@ public class TemplateMatchingPlugin implements Command {
 				trueSegmentation = Views.stack( trueSegImageBucket );
 			}
 			ij.ui().show( trueSegmentation );
+			ImagePlus segPlus = ImageJFunctions.wrap( trueSegmentation, null );
+			String savePathName = "/Users/prakash/Desktop/" + String.valueOf( index ) + ".tif";
+			IJ.save( segPlus, savePathName );
+
+//			ij.scifio().datasetIO().save( ds.create( trueSegmentation ), savePathName );
+
 		}
 	}  //runThrowsException Method loop
 

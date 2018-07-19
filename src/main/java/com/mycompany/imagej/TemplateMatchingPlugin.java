@@ -41,6 +41,14 @@ import net.imglib2.type.numeric.real.FloatType;
 import net.imglib2.util.Util;
 import net.imglib2.view.Views;
 
+/**
+ * Template Matching Plugin for Fiji/ImageJ2
+ *
+ * @author Mangal Prakash
+ */
+
+//@Plugin( menuPath = "Plugins>Segmentation>Template Matching", description = "Hello TemplateMatching.", headless = false, type = Command.class )
+
 public class TemplateMatchingPlugin implements Command {
 
 	@Parameter
@@ -48,6 +56,9 @@ public class TemplateMatchingPlugin implements Command {
 
 	@Parameter
 	DatasetIOService io;
+
+//	@Parameter
+//	String imagePathName;
 
 	public static void main( String[] args ) throws IOException {
 		TemplateMatchingPlugin instanceOfMine = new TemplateMatchingPlugin();
@@ -68,8 +79,8 @@ public class TemplateMatchingPlugin implements Command {
 		final ImageJ ij = new ImageJ();
 		ij.ui().showUI();
 
-//		String imagePathName = "/Users/prakash/Desktop/BeetlesDataAndResults/Tr2D10time/raw.tif";
-		String imagePathName = "/Users/prakash/Desktop/sampleraw.tif";
+		String imagePathName = "/Users/prakash/Desktop/BeetlesDataAndResults/Tr2D10time/raw.tif";
+//		String imagePathName = "/Users/prakash/Desktop/sampleraw.tif";
 		Dataset imagefile = ij.scifio().datasetIO().open( imagePathName );
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
 		
@@ -340,11 +351,14 @@ public class TemplateMatchingPlugin implements Command {
 			} // while repeat loop
 			RandomAccessibleInterval oneTimeStack = Views.stack( segImagesBucket );
 			multiTimeStack.add( oneTimeStack );
+//			ij.ui().show( oneTimeStack );
 
 		}  //Image Loop
-
+		System.out.println( maxStackSize );
+		System.out.println( multiTimeStack.size() );
 		RandomAccessibleInterval trueSegmentation = null;
-		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ), 1 };
+
+		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ) };
 		RandomAccessibleInterval< T > blankImage = imp.getImg().factory().create( blankImDims );
 
 		for ( int index = 0; index < maxStackSize; index++ ) {
@@ -363,7 +377,7 @@ public class TemplateMatchingPlugin implements Command {
 			}
 			ij.ui().show( trueSegmentation );
 			ImagePlus segPlus = ImageJFunctions.wrap( trueSegmentation, null );
-			String savePathName = "/Users/prakash/Desktop/" + String.valueOf( index ) + ".tif";
+			String savePathName = "/Users/prakash/Desktop/sampleTemplateMatching/" + String.valueOf( index ) + ".tif";
 			IJ.save( segPlus, savePathName );
 
 //			ij.scifio().datasetIO().save( ds.create( trueSegmentation ), savePathName );

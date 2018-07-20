@@ -140,7 +140,10 @@ public class TemplateMatchingPlugin implements Command {
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
 
-			statusService.showStatus( imageNumber, imageBucket.size(), "Processing Images" );
+			statusService.showStatus(
+					imageNumber,
+					imageBucket.size(),
+					"Processing Image" + " " + String.valueOf( imageNumber ) + "/" + String.valueOf( imageBucket.size() ) );
 			List detections = new ArrayList();
 			List xDetections = new ArrayList();
 			List yDetections = new ArrayList();

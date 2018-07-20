@@ -15,6 +15,7 @@ import java.util.Map;
 
 import org.bytedeco.javacpp.opencv_core;
 import org.bytedeco.javacpp.opencv_core.Mat;
+import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
@@ -73,7 +74,8 @@ public class TemplateMatchingPlugin implements Command {
 	@Parameter( label = "Segmentation circle radius" )
 	private int segCircleRad;
 
-
+	@Parameter
+	StatusService statusService;
 
 	public static void main( String[] args ) throws IOException {
 
@@ -93,6 +95,17 @@ public class TemplateMatchingPlugin implements Command {
 			Dataset templateFile = datasetIOService.open( inputTemplate.getAbsolutePath() );
 			File saveDir = saveResultsDir;
 			int segRad = segCircleRad;
+			
+//			if(saveDir.isDirectory()) {
+//				if(saveDir.list().length  == 0) {
+//					saveDir = saveResultsDir;
+//				}
+//				else {
+//					System.out.println( "Directory not empty! Please choose another directory" );
+//					saveDir = ij.ui().chooseFile( null, "save" );
+//				}
+//			}
+			
 			templateMatching( imageFile, templateFile, saveDir, segRad );
 		} catch ( Exception e ) {
 			e.printStackTrace();
@@ -107,7 +120,7 @@ public class TemplateMatchingPlugin implements Command {
 			final File saveDir,
 			final int segRadius )
 			throws Exception {
-
+		
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
 		
 		//Split the image movie in 2D images and store them in list
@@ -127,6 +140,7 @@ public class TemplateMatchingPlugin implements Command {
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
 
+			statusService.showStatus( imageNumber, imageBucket.size(), "Processing Images" );
 			List detections = new ArrayList();
 			List xDetections = new ArrayList();
 			List yDetections = new ArrayList();
@@ -390,7 +404,9 @@ public class TemplateMatchingPlugin implements Command {
 			ij.ui().show( trueSegmentation );
 			ImagePlus segPlus = ImageJFunctions.wrap( trueSegmentation, null );
 			String strIndex = String.valueOf( index );
+
 			String savePathName = saveDir.getAbsolutePath() + "/" + strIndex + ".tif";
+
 			IJ.save( segPlus, savePathName );
 
 //			ij.scifio().datasetIO().save( ds.create( trueSegmentation ), savePathName );

@@ -17,6 +17,7 @@ import org.bytedeco.javacpp.opencv_core;
 import org.bytedeco.javacpp.opencv_core.Mat;
 import org.scijava.command.Command;
 import org.scijava.plugin.Parameter;
+import org.scijava.plugin.Plugin;
 
 import ij.IJ;
 import ij.ImagePlus;
@@ -24,7 +25,6 @@ import ijopencv.ij.ImagePlusMatConverter;
 import ijopencv.opencv.MatImagePlusConverter;
 import io.scif.services.DatasetIOService;
 import net.imagej.Dataset;
-import net.imagej.DatasetService;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
 import net.imglib2.Cursor;
@@ -48,55 +48,68 @@ import net.imglib2.view.Views;
  * @author Mangal Prakash
  */
 
-//@Plugin( menuPath = "Plugins>Segmentation>Template Matching", description = "Hello TemplateMatching.", headless = false, type = Command.class )
+@Plugin( menuPath = "Plugins>Segmentation>Template Matching Segmentation", type = Command.class )
 
 public class TemplateMatchingPlugin implements Command {
 
 	@Parameter
-	DatasetService ds;
+	private ImageJ ij;
 
 	@Parameter
-	DatasetIOService io;
+	DatasetIOService datasetIOService;
 
 //	@Parameter
-//	Dataset currentData;
+//	private Dataset dataset;
+	
+	@Parameter( label = "Image to load" )
+	private File inputImage;
 
-//	@Parameter
-//	String imagePathName;
+	@Parameter( label = "Template to load" )
+	private File inputTemplate;
+
+	@Parameter( style = "directory" )
+	private File saveResultsDir;
+
+	@Parameter( label = "Segmentation circle radius" )
+	private int segCircleRad;
+
+
 
 	public static void main( String[] args ) throws IOException {
-		TemplateMatchingPlugin instanceOfMine = new TemplateMatchingPlugin();
-		instanceOfMine.run();
+
+		final ImageJ ij = new ImageJ();
+		ij.ui().showUI();
+//		final File inputFile = ij.ui().chooseFile( null, "open" );
+//		final Dataset dataset = ij.scifio().datasetIO().open( inputFile.getPath() );
+//		ij.ui().show( dataset );
+		ij.command().run( TemplateMatchingPlugin.class, true );
+
 	}
 
 	@Override
 	public void run() {
 		try {
-			runThrowsException();
+			Dataset imageFile = datasetIOService.open( inputImage.getAbsolutePath() );
+			Dataset templateFile = datasetIOService.open( inputTemplate.getAbsolutePath() );
+			File saveDir = saveResultsDir;
+			int segRad = segCircleRad;
+			templateMatching( imageFile, templateFile, saveDir, segRad );
 		} catch ( Exception e ) {
 			e.printStackTrace();
 		}
+
 	}
 
 
-	private < T extends RealType< T > & NativeType< T > > void runThrowsException() throws Exception {
-		final ImageJ ij = new ImageJ();
-		ij.ui().showUI();
+	private < T extends RealType< T > & NativeType< T > > void templateMatching(
+			final Dataset imagefile,
+			final Dataset templateFile,
+			final File saveDir,
+			final int segRadius )
+			throws Exception {
 
-		File imageFile = ij.ui().chooseFile( null, "open" );
-		File templateFile = ij.ui().chooseFile( null, "open" );
-
-
-//		String imagePathName = "/Users/prakash/Desktop/BeetlesDataAndResults/Tr2D10time/raw.tif";
-//		String imagePathName = "/Users/prakash/Desktop/sampleraw.tif";
-
-		Dataset imagefile = ij.scifio().datasetIO().open( imageFile.getPath() );
-//		Dataset imagefile = ij.scifio().datasetIO().open( imagePathName );
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
-
-//		ImgPlus< T > imp = ( ImgPlus< T > ) currentData.getImgPlus();
 		
-
 		//Split the image movie in 2D images and store them in list
 		final List< RandomAccessibleInterval< T > > imageBucket =
 				new ArrayList< RandomAccessibleInterval< T > >();
@@ -105,11 +118,7 @@ public class TemplateMatchingPlugin implements Command {
 			imageBucket.add( rai );
 		}
 
-		//Load template 
-//		String templatePathName = "/Users/prakash/Desktop/raw_untemp2.tif";
-		Dataset templatefile = ij.scifio().datasetIO().open( templateFile.getPath() );
-//		Dataset templatefile = ij.scifio().datasetIO().open( templatePathName );
-		ImgPlus< T > template = ( ImgPlus< T > ) templatefile.getImgPlus();
+		ImgPlus< T > template = ( ImgPlus< T > ) templateFile.getImgPlus();
 
 
 		double thresholdmatch = 0.3;
@@ -131,23 +140,14 @@ public class TemplateMatchingPlugin implements Command {
 			Img< T > img = ImgView.wrap( raiImg, new ArrayImgFactory<>( t ) );
 			Img< T > imgCopy = img.copy();
 
-//			ImgPlus< T > imgPlus = new ImgPlus<>( img );
-//			ArrayImgFactory< T > factory = new ArrayImgFactory<>( t );
-//			factory.create( 10, 10 );
-			//			ImgPlus img = ( ImgPlus ) ImageJFunctions.wrapFloat( ImageJFunctions.show( raiImg ) );
-
-
 			double[] sigmas = { 1.5, 1.5 };
 			RandomAccessibleInterval< FloatType > imgSmooth = ij.op().filter().gauss( raiImg, sigmas );
-//			System.out.println( Util.getTypeFromInterval( imgSmooth ).getClass() );
-
 			FloatType maxVal = new FloatType();
 			ij.op().stats().max( maxVal, Views.iterable( imgSmooth ) );
 			float inverse = 1.0f / maxVal.getRealFloat();
 
 			//Normalizing the image
 			LoopBuilder.setImages( imgSmooth ).forEachPixel( pixel -> pixel.mul( inverse ) );
-//			ij.ui().show( imgSmooth );
 
 			//Converters
 			ImagePlusMatConverter ic = new ImagePlusMatConverter();
@@ -155,10 +155,10 @@ public class TemplateMatchingPlugin implements Command {
 
 			ImagePlus wrappedImage = ImageJFunctions.wrap( raiImg, "Original Image" );
 			ImagePlus wrappedSmoothImage = ImageJFunctions.wrap( imgSmooth, "Smooth Image" );
+
 			// Convert the image to OpenCV image
 			opencv_core.Mat cvImage = ic.convert( wrappedImage, Mat.class );
 			opencv_core.Mat cvSmoothImage = ic.convert( wrappedSmoothImage, Mat.class );
-
 
 			Img< T > maxHitsIntensity = img.copy();
 			LoopBuilder.setImages( maxHitsIntensity ).forEachPixel( pixel -> pixel.setZero() );
@@ -175,6 +175,7 @@ public class TemplateMatchingPlugin implements Command {
 			int padWTo = ( int ) ( raiImg.dimension( 0 ) - padWFrom + 1 );
 
 			for ( int angle = 0; angle < 180; angle = angle + 3 ) {
+
 				//Rotate template
 				RandomAccessibleInterval< T > templateRot = Utilities.rotate( ij, template, angle );
 				ImagePlus rot = ImageJFunctions.wrap( templateRot, "rotated" );
@@ -258,10 +259,10 @@ public class TemplateMatchingPlugin implements Command {
 					}
 				}
 			}
+
 			//Peak Local Maximum detection
 
 			int radius = 1;
-
 			Map< Integer, List > lists = Utilities.peakLocalMax( maxHitsIntensity, radius );
 			List< Double > xDetectionsPerTemplate = lists.get( 1 );
 			List< Double > yDetectionsPerTemplate = lists.get( 2 );
@@ -296,7 +297,7 @@ public class TemplateMatchingPlugin implements Command {
 			System.out.println( "done!" );
 
 			List segImagesBucket = new ArrayList();
-			int drawSegRadius = 4;
+			int drawSegRadius = segRadius;
 			//Create a list of all zeros to track which coordinates have been plotted
 			List< Integer > done = new ArrayList< Integer >( Collections.nCopies( detections.size(), 0 ) );
 
@@ -333,14 +334,13 @@ public class TemplateMatchingPlugin implements Command {
 					}
 					if ( searchMax == 0 ) {
 
-						//Draw segmentation circle of radius drawSegRadius on intersectingSegs and set
-						//done.get(i) ==1
 						RandomAccess< T > drawingAccessor = segImage.randomAccess();
 						double xDrawPoint = xDetectionsPerTemplate.get( i );
 						double yDrawPoint = yDetectionsPerTemplate.get( i );
 						drawingAccessor.setPosition( ( int ) xDrawPoint, 0 );
 						drawingAccessor.setPosition( ( int ) yDrawPoint, 1 );
 						HyperSphere< T > hyperSphere = new HyperSphere<>( segImage, drawingAccessor, drawSegRadius );
+
 						// set every value inside the sphere to 1
 						for ( T value : hyperSphere ) {
 							value.setOne();
@@ -348,9 +348,9 @@ public class TemplateMatchingPlugin implements Command {
 						done.set( i, 1 );
 						repeat = true;
 
-					} //If loop
+					}
 
-				} // detections for loop
+				}
 
 				if ( repeat ) {
 					segImagesBucket.add( segImage );
@@ -359,14 +359,13 @@ public class TemplateMatchingPlugin implements Command {
 						maxStackSize = stackSize;
 					}
 
-				} // If repeat loop
+				}
 
-			} // while repeat loop
+			}
 			RandomAccessibleInterval oneTimeStack = Views.stack( segImagesBucket );
 			multiTimeStack.add( oneTimeStack );
-//			ij.ui().show( oneTimeStack );
 
-		}  //Image Loop
+		}
 		System.out.println( maxStackSize );
 		System.out.println( multiTimeStack.size() );
 		RandomAccessibleInterval trueSegmentation = null;
@@ -391,12 +390,11 @@ public class TemplateMatchingPlugin implements Command {
 			ij.ui().show( trueSegmentation );
 			ImagePlus segPlus = ImageJFunctions.wrap( trueSegmentation, null );
 			String strIndex = String.valueOf( index );
-			String savePathName = "/Users/prakash/Desktop/sampleTemplateMatching/" + strIndex + ".tif";
+			String savePathName = saveDir.getAbsolutePath() + "/" + strIndex + ".tif";
 			IJ.save( segPlus, savePathName );
 
 //			ij.scifio().datasetIO().save( ds.create( trueSegmentation ), savePathName );
 
 		}
-	}  //runThrowsException Method loop
-
-} // CommandPlugin Loop
+	}
+}

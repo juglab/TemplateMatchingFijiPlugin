@@ -19,6 +19,7 @@ import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
+import org.scijava.ui.UIService;
 
 import ij.IJ;
 import ij.ImagePlus;
@@ -76,14 +77,14 @@ public class TemplateMatchingPlugin implements Command {
 
 	@Parameter
 	StatusService statusService;
+	
+	@Parameter
+	UIService uiService;
 
 	public static void main( String[] args ) throws IOException {
 
 		final ImageJ ij = new ImageJ();
 		ij.ui().showUI();
-//		final File inputFile = ij.ui().chooseFile( null, "open" );
-//		final Dataset dataset = ij.scifio().datasetIO().open( inputFile.getPath() );
-//		ij.ui().show( dataset );
 		ij.command().run( TemplateMatchingPlugin.class, true );
 
 	}
@@ -98,7 +99,7 @@ public class TemplateMatchingPlugin implements Command {
 
 	}
 
-	private < T extends RealType< T > & NativeType< T > > void templateMatching( )
+	private < T extends RealType< T > & NativeType< T > > void templateMatching()
 			throws Exception {
 		
 		Dataset imagefile = datasetIOService.open( inputImage.getAbsolutePath() );
@@ -109,18 +110,33 @@ public class TemplateMatchingPlugin implements Command {
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
 		ImgPlus< T > template = ( ImgPlus< T > ) templateFile.getImgPlus();
 		double thresholdmatch = 0.3;
+		StatusService statusService = this.statusService;
 
+		List trueSegmentations = templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
+
+		for( Object trueSegmentation : trueSegmentations )
+			uiService.show( trueSegmentation );
+	}
+
+	private < T extends RealType< T > & NativeType< T > > List templateMatching(
+			File saveDir,
+			int segRadius,
+			ImgPlus< T > imp,
+			ImgPlus< T > template,
+			double thresholdmatch,
+			StatusService statusService ) {
 		final List< RandomAccessibleInterval< T > > imageBucket = sliceImage( imp );
 
 		List multiTimeSegStack = new ArrayList();
 		int maxStackSize = 0;
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
-
-			statusService.showStatus(
-					imageNumber,
-					imageBucket.size(),
-					"Processing Image" + " " + String.valueOf( imageNumber ) + "/" + String.valueOf( imageBucket.size() ) );
+			if ( statusService != null ) {
+				statusService.showStatus(
+						imageNumber,
+						imageBucket.size(),
+						"Processing Image" + " " + String.valueOf( imageNumber ) + "/" + String.valueOf( imageBucket.size() ) );
+			}
 			RandomAccessibleInterval< T > slice = imageBucket.get( imageNumber );
 			List segImagesBucketPerTime = calculateNonIntersectSegStackPerTime( segRadius, template, thresholdmatch, slice );
 
@@ -128,25 +144,22 @@ public class TemplateMatchingPlugin implements Command {
 			RandomAccessibleInterval nonIntersectSegStackPerTime = Views.stack( segImagesBucketPerTime );
 			multiTimeSegStack.add( nonIntersectSegStackPerTime );
 		}
-		System.out.println( maxStackSize );
-		System.out.println( multiTimeSegStack.size() );
-		RandomAccessibleInterval trueSegmentation = null;
 
-		createSegmentationOutput( saveDir, imp, multiTimeSegStack, maxStackSize, trueSegmentation );
+
+		return createSegmentationOutput( saveDir, imp, multiTimeSegStack, maxStackSize );
 	}
 
 
 	///All key method implementations below
 
-	private < T extends RealType< T > & NativeType< T > > void createSegmentationOutput(
+	private static < T extends RealType< T > & NativeType< T > > List createSegmentationOutput(
 			final File saveDir,
 			ImgPlus< T > imp,
 			List multiTimeSegStack,
-			int maxStackSize,
-			RandomAccessibleInterval trueSegmentation ) {
+			int maxStackSize ) {
 		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ) };
 		RandomAccessibleInterval< T > blankImage = imp.getImg().factory().create( blankImDims );
-
+		List trueSegmentations = new ArrayList();
 		for ( int index = 0; index < maxStackSize; index++ ) {
 			ArrayList trueSegImageBucket = new ArrayList();
 			for ( int k = 0; k < multiTimeSegStack.size(); k++ ) {
@@ -158,20 +171,17 @@ public class TemplateMatchingPlugin implements Command {
 
 					trueSegImageBucket.add( hyperslice );
 				}
-				trueSegmentation = Views.stack( trueSegImageBucket );
 			}
-			ij.ui().show( trueSegmentation );
+			RandomAccessibleInterval trueSegmentation = Views.stack( trueSegImageBucket );
+			trueSegmentations.add( trueSegmentation );
 			ImagePlus segPlus = ImageJFunctions.wrap( trueSegmentation, null );
 			String strIndex = String.valueOf( index );
 
 			String savePathName = saveDir.getAbsolutePath() + "/" + strIndex + ".tif";
 
 			IJ.save( segPlus, savePathName );
-
-
-//			ij.scifio().datasetIO().save( ds.create( trueSegmentation ), savePathName );
-
 		}
+		return trueSegmentations;
 	}
 
 	private < T extends RealType< T > & NativeType< T > > List calculateNonIntersectSegStackPerTime(
@@ -365,7 +375,7 @@ public class TemplateMatchingPlugin implements Command {
 						.add( new AbstractMap.SimpleEntry( xDetectionsPerTemplate.get( i ), yDetectionsPerTemplate.get( i ) ) );
 			}
 		}
-
+		System.out.println( detectionsPerTemplate.size() );
 		RandomAccess< T > maxHitsSecondaryAccessor = maxHits.randomAccess();
 		RandomAccess< T > maxHitsAngleSecondaryAccessor = maxHitsAngle.randomAccess();
 
@@ -383,8 +393,12 @@ public class TemplateMatchingPlugin implements Command {
 		detections.addAll( detectionsPerTemplate );
 		xDetections.addAll( xDetectionsPerTemplate );
 		yDetections.addAll( yDetectionsPerTemplate );
-
+		System.out.println( detections.size() );
 		System.out.println( "done!" );
+
+		/// I will implement overlay here
+
+		/// Overlay end
 
 		List segImagesBucket = new ArrayList();
 		int drawSegRadius = segRadius;
@@ -466,7 +480,7 @@ public class TemplateMatchingPlugin implements Command {
 		return imgSmooth;
 	}
 
-	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > sliceImage( ImgPlus< T > imp ) {
+	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > sliceImage( ImgPlus< T > imp ) {
 		//Split the image movie in 2D images and store them in list
 		final List< RandomAccessibleInterval< T > > imageBucket =
 				new ArrayList< RandomAccessibleInterval< T > >();

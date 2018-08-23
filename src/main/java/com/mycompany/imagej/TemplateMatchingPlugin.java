@@ -29,6 +29,7 @@ import io.scif.services.DatasetIOService;
 import net.imagej.Dataset;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
+import net.imagej.ops.OpService;
 import net.imglib2.Cursor;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
@@ -37,6 +38,7 @@ import net.imglib2.img.Img;
 import net.imglib2.img.ImgView;
 import net.imglib2.img.array.ArrayImgFactory;
 import net.imglib2.img.display.imagej.ImageJFunctions;
+import net.imglib2.img.planar.PlanarImgFactory;
 import net.imglib2.loops.LoopBuilder;
 import net.imglib2.type.NativeType;
 import net.imglib2.type.numeric.RealType;
@@ -52,7 +54,7 @@ import net.imglib2.view.Views;
 
 @Plugin( menuPath = "Plugins>Segmentation>Template Matching Segmentation", type = Command.class )
 
-public class TemplateMatchingPlugin implements Command {
+public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > > implements Command {
 
 	@Parameter
 	private ImageJ ij;
@@ -81,6 +83,9 @@ public class TemplateMatchingPlugin implements Command {
 	@Parameter
 	UIService uiService;
 
+	@Parameter
+	private OpService ops;
+
 	public static void main( String[] args ) throws IOException {
 
 		final ImageJ ij = new ImageJ();
@@ -99,7 +104,7 @@ public class TemplateMatchingPlugin implements Command {
 
 	}
 
-	private < T extends RealType< T > & NativeType< T > > void templateMatching()
+	private void templateMatching()
 			throws Exception {
 		
 		Dataset imagefile = datasetIOService.open( inputImage.getAbsolutePath() );
@@ -111,23 +116,23 @@ public class TemplateMatchingPlugin implements Command {
 		ImgPlus< T > template = ( ImgPlus< T > ) templateFile.getImgPlus();
 		double thresholdmatch = 0.3;
 		StatusService statusService = this.statusService;
-
-		List trueSegmentations = templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
+		List< RandomAccessibleInterval< T > > trueSegmentations =
+				templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
 
 		for( Object trueSegmentation : trueSegmentations )
 			uiService.show( trueSegmentation );
 	}
 
-	private < T extends RealType< T > & NativeType< T > > List templateMatching(
+	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > templateMatching(
 			File saveDir,
 			int segRadius,
-			ImgPlus< T > imp,
-			ImgPlus< T > template,
+			RandomAccessibleInterval< T > imp,
+			RandomAccessibleInterval< T > template,
 			double thresholdmatch,
 			StatusService statusService ) {
 		final List< RandomAccessibleInterval< T > > imageBucket = sliceImage( imp );
 
-		List multiTimeSegStack = new ArrayList();
+		List< RandomAccessibleInterval< T > > multiTimeSegStack = new ArrayList();
 		int maxStackSize = 0;
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
@@ -138,10 +143,11 @@ public class TemplateMatchingPlugin implements Command {
 						"Processing Image" + " " + String.valueOf( imageNumber ) + "/" + String.valueOf( imageBucket.size() ) );
 			}
 			RandomAccessibleInterval< T > slice = imageBucket.get( imageNumber );
-			List segImagesBucketPerTime = calculateNonIntersectSegStackPerTime( segRadius, template, thresholdmatch, slice );
+			List< RandomAccessibleInterval< T > > segImagesBucketPerTime =
+					calculateNonIntersectSegStackPerTime( segRadius, template, thresholdmatch, slice );
 
 			maxStackSize = Math.max( maxStackSize, segImagesBucketPerTime.size() );
-			RandomAccessibleInterval nonIntersectSegStackPerTime = Views.stack( segImagesBucketPerTime );
+			RandomAccessibleInterval< T > nonIntersectSegStackPerTime = Views.stack( segImagesBucketPerTime );
 			multiTimeSegStack.add( nonIntersectSegStackPerTime );
 		}
 
@@ -152,14 +158,14 @@ public class TemplateMatchingPlugin implements Command {
 
 	///All key method implementations below
 
-	private static < T extends RealType< T > & NativeType< T > > List createSegmentationOutput(
+	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > createSegmentationOutput(
 			final File saveDir,
-			ImgPlus< T > imp,
+			RandomAccessibleInterval< T > imp,
 			List multiTimeSegStack,
 			int maxStackSize ) {
 		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ) };
-		RandomAccessibleInterval< T > blankImage = imp.getImg().factory().create( blankImDims );
-		List trueSegmentations = new ArrayList();
+		RandomAccessibleInterval< T > blankImage = new PlanarImgFactory( Util.getTypeFromInterval( imp ) ).create( blankImDims );
+		List< RandomAccessibleInterval< T > > trueSegmentations = new ArrayList();
 		for ( int index = 0; index < maxStackSize; index++ ) {
 			ArrayList trueSegImageBucket = new ArrayList();
 			for ( int k = 0; k < multiTimeSegStack.size(); k++ ) {
@@ -184,9 +190,9 @@ public class TemplateMatchingPlugin implements Command {
 		return trueSegmentations;
 	}
 
-	private < T extends RealType< T > & NativeType< T > > List calculateNonIntersectSegStackPerTime(
+	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > calculateNonIntersectSegStackPerTime(
 			final int segRadius,
-			ImgPlus< T > template,
+			RandomAccessibleInterval< T > template,
 			double thresholdmatch,
 			RandomAccessibleInterval< T > raiImg ) {
 		List detections = new ArrayList();
@@ -199,7 +205,7 @@ public class TemplateMatchingPlugin implements Command {
 		T t = Util.getTypeFromInterval( raiImg );
 		Img< T > img = ImgView.wrap( raiImg, new ArrayImgFactory<>( t ) );
 		Img< T > imgCopy = img.copy();
-		RandomAccessibleInterval< FloatType > imgSmooth = gaussSmooth( raiImg );
+		RandomAccessibleInterval< T > imgSmooth = gaussSmooth( raiImg );
 
 		//Normalize smoothed image
 		normalizeImage( imgSmooth );
@@ -229,51 +235,7 @@ public class TemplateMatchingPlugin implements Command {
 		int padHTo = ( int ) ( raiImg.dimension( 1 ) - padHFrom + 1 );
 		int padWTo = ( int ) ( raiImg.dimension( 0 ) - padWFrom + 1 );
 
-		List segImagesBucket = doTemplateMatching(
-				segRadius,
-				template,
-				thresholdmatch,
-				detections,
-				xDetections,
-				yDetections,
-				maximaPerTemplate,
-				anglePerTemplate,
-				img,
-				imgSmooth,
-				ic,
-				mip,
-				cvImage,
-				maxHitsIntensity,
-				maxHits,
-				maxHitsAngle,
-				padHFrom,
-				padWFrom,
-				padHTo,
-				padWTo );
-		return segImagesBucket;
-	}
 
-	private < T extends RealType< T > & NativeType< T > > List doTemplateMatching(
-			final int segRadius,
-			ImgPlus< T > template,
-			double thresholdmatch,
-			List detections,
-			List xDetections,
-			List yDetections,
-			List maximaPerTemplate,
-			List anglePerTemplate,
-			Img< T > img,
-			RandomAccessibleInterval< FloatType > imgSmooth,
-			ImagePlusMatConverter ic,
-			MatImagePlusConverter mip,
-			opencv_core.Mat cvImage,
-			Img< T > maxHitsIntensity,
-			Img< T > maxHits,
-			Img< T > maxHitsAngle,
-			int padHFrom,
-			int padWFrom,
-			int padHTo,
-			int padWTo ) {
 		for ( int angle = 0; angle < 180; angle = angle + 3 ) {
 
 			//Rotate template
@@ -465,22 +427,25 @@ public class TemplateMatchingPlugin implements Command {
 	}
 
 
-	private void normalizeImage( RandomAccessibleInterval< FloatType > imgSmooth ) {
-		FloatType maxVal = new FloatType();
-		ij.op().stats().max( maxVal, Views.iterable( imgSmooth ) );
+	private < T extends RealType< T > > void normalizeImage( RandomAccessibleInterval< T > imgSmooth ) {
+		T maxVal = Util.getTypeFromInterval( imgSmooth ).createVariable();
+		ops.stats().max( maxVal, Views.iterable( imgSmooth ) );
+//		ij.op().stats().max( maxVal, Views.iterable( imgSmooth ) );
 		float inverse = 1.0f / maxVal.getRealFloat();
 
 		//Normalizing the image
 		LoopBuilder.setImages( imgSmooth ).forEachPixel( pixel -> pixel.mul( inverse ) );
 	}
 
-	private < T extends RealType< T > & NativeType< T > > RandomAccessibleInterval< FloatType > gaussSmooth( RandomAccessibleInterval< T > raiImg ) {
+	private < T extends RealType< T > & NativeType< T > > RandomAccessibleInterval< T > gaussSmooth( RandomAccessibleInterval< T > raiImg ) {
 		double[] sigmas = { 1.5, 1.5 };
-		RandomAccessibleInterval< FloatType > imgSmooth = ij.op().filter().gauss( raiImg, sigmas );
-		return imgSmooth;
+
+//		return ij.op().filter().gauss( raiImg, sigmas );
+		return ops.filter().gauss( raiImg, sigmas );
 	}
 
-	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > sliceImage( ImgPlus< T > imp ) {
+	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > sliceImage(
+			RandomAccessibleInterval< T > imp ) {
 		//Split the image movie in 2D images and store them in list
 		final List< RandomAccessibleInterval< T > > imageBucket =
 				new ArrayList< RandomAccessibleInterval< T > >();
@@ -489,5 +454,12 @@ public class TemplateMatchingPlugin implements Command {
 			imageBucket.add( rai );
 		}
 		return imageBucket;
+	}
+
+	public List< RandomAccessibleInterval< T > > calculate(
+			RandomAccessibleInterval< T > rawData,
+			RandomAccessibleInterval< T > template,
+			int segmentationRadius ) {
+		return templateMatching( new File( "/Users/prakash/Desktop/TemplateMatchingSegsButton" ), segmentationRadius, rawData, template, 0.3, null );
 	}
 }

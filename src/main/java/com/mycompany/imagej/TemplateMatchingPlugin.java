@@ -62,9 +62,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 	@Parameter
 	DatasetIOService datasetIOService;
 
-//	@Parameter
-//	private Dataset dataset;
-
 	@Parameter( label = "Image to load" )
 	private File inputImage;
 
@@ -74,8 +71,12 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 	@Parameter( style = "directory" )
 	private File saveResultsDir;
 
-	@Parameter( label = "Segmentation circle radius" )
-	private int segCircleRad;
+	@Parameter( label = "Segmentation circle radius", persist = false, min = "1" )
+	private int segCircleRad = 3;
+
+	@Parameter( label = "Matching Threshold", persist = false, min = "0.1", max = "1.0", stepSize = "0.05" )
+	private double threshold = 0.3;
+
 
 	@Parameter
 	StatusService statusService;
@@ -114,7 +115,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
 		ImgPlus< T > template = ( ImgPlus< T > ) templateFile.getImgPlus();
-		double thresholdmatch = 0.3;
+		double thresholdmatch = threshold;
 		StatusService statusService = this.statusService;
 		List< RandomAccessibleInterval< T > > trueSegmentations =
 				templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
@@ -142,6 +143,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 						imageBucket.size(),
 						"Processing Image" + " " + String.valueOf( imageNumber ) + "/" + String.valueOf( imageBucket.size() ) );
 			}
+
 			RandomAccessibleInterval< T > slice = imageBucket.get( imageNumber );
 			List< RandomAccessibleInterval< T > > segImagesBucketPerTime =
 					calculateNonIntersectSegStackPerTime( segRadius, template, thresholdmatch, slice );
@@ -204,7 +206,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		//Gaussian Smoothing of Image
 		T t = Util.getTypeFromInterval( raiImg );
 		Img< T > img = ImgView.wrap( raiImg, new ArrayImgFactory<>( t ) );
-		Img< T > imgCopy = img.copy();
+//		Img< T > imgCopy = img.copy();
 		RandomAccessibleInterval< T > imgSmooth = gaussSmooth( raiImg );
 
 		//Normalize smoothed image
@@ -358,10 +360,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		System.out.println( detections.size() );
 		System.out.println( "done!" );
 
-		/// I will implement overlay here
-
-		/// Overlay end
-
 		List segImagesBucket = new ArrayList();
 		int drawSegRadius = segRadius;
 		//Create a list of all zeros to track which coordinates have been plotted
@@ -401,10 +399,14 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 				if ( searchMax == 0 ) {
 
 					RandomAccess< T > drawingAccessor = segImage.randomAccess();
+//					RandomAccess< T > drawingOverlayAccessor = imgCopy.randomAccess();
 					double xDrawPoint = xDetectionsPerTemplate.get( i );
 					double yDrawPoint = yDetectionsPerTemplate.get( i );
 					drawingAccessor.setPosition( ( int ) xDrawPoint, 0 );
 					drawingAccessor.setPosition( ( int ) yDrawPoint, 1 );
+//					drawingOverlayAccessor.setPosition( ( int ) xDrawPoint, 0 );
+//					drawingOverlayAccessor.setPosition( ( int ) yDrawPoint, 1 );
+//					drawingOverlayAccessor.get().setZero();
 					HyperSphere< T > hyperSphere = new HyperSphere<>( segImage, drawingAccessor, drawSegRadius );
 
 					// set every value inside the sphere to 1
@@ -423,6 +425,8 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 				segImagesBucket.add( segImage );
 			}
 		}
+//		Wrapper wrappedOverlayAndSegImgBucket = new Wrapper( segImagesBucket, imgCopy );
+//		return wrappedOverlayAndSegImgBucket;
 		return segImagesBucket;
 	}
 
@@ -439,8 +443,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 	private < T extends RealType< T > & NativeType< T > > RandomAccessibleInterval< T > gaussSmooth( RandomAccessibleInterval< T > raiImg ) {
 		double[] sigmas = { 1.5, 1.5 };
-
-//		return ij.op().filter().gauss( raiImg, sigmas );
 		return ops.filter().gauss( raiImg, sigmas );
 	}
 
@@ -459,7 +461,14 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 	public List< RandomAccessibleInterval< T > > calculate(
 			RandomAccessibleInterval< T > rawData,
 			RandomAccessibleInterval< T > template,
-			int segmentationRadius ) {
-		return templateMatching( new File( "/Users/prakash/Desktop/TemplateMatchingSegsButton" ), segmentationRadius, rawData, template, 0.3, null );
+			int segmentationRadius,
+			double matchingThreshold ) {
+		return templateMatching(
+				new File( "/Users/prakash/Desktop/TemplateMatchingSegsButton" ),
+				segmentationRadius,
+				rawData,
+				template,
+				matchingThreshold,
+				null );
 	}
 }

@@ -1,18 +1,16 @@
 package com.mycompany.imagej;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import net.imagej.ImageJ;
 import net.imglib2.Cursor;
 import net.imglib2.Interval;
+import net.imglib2.Point;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.RealRandomAccessible;
 import net.imglib2.algorithm.neighborhood.Neighborhood;
 import net.imglib2.algorithm.neighborhood.RectangleShape;
-import net.imglib2.img.Img;
 import net.imglib2.interpolation.randomaccess.NLinearInterpolatorFactory;
 import net.imglib2.realtransform.AffineTransform2D;
 import net.imglib2.realtransform.RealViews;
@@ -22,17 +20,46 @@ import net.imglib2.view.Views;
 
 public class Utilities {
 
-	public static < T extends RealType< T > > Map< Integer, List > peakLocalMax(
+//	public static < T extends RealType< T > > Map< Integer, List > peakLocalMax(
+//			RandomAccessibleInterval< T > source,
+//			int radius ) {
+//
+//		Map< Integer, List > listMap = new HashMap< Integer, List >();
+//		List xArray1 = new ArrayList();
+//		List yArray1 = new ArrayList();
+//		List centerList = new ArrayList();
+//		listMap.put( 1, xArray1 );
+//		listMap.put( 2, yArray1 );
+//
+//		Interval interval = Intervals.expand( source, -1 );
+//		source = Views.interval( source, interval );
+//		final Cursor< T > center = Views.iterable( source ).cursor();
+//		final RectangleShape shape = new RectangleShape( radius, true );
+//		for ( final Neighborhood< T > localNeighborhood : shape.neighborhoods( source ) ) {
+//			final T centerValue = center.next();
+//			boolean isMaximum = true;
+//			for ( final T value : localNeighborhood ) {
+//				if ( centerValue.compareTo( value ) <= 0 ) {
+//					isMaximum = false;
+//					break;
+//				}
+//			}
+//			if ( isMaximum ) {
+//
+//				xArray1.add( ( double ) center.getIntPosition( 0 ) );
+//				yArray1.add( ( double ) center.getIntPosition( 1 ) );
+//				centerList.add( centerValue );
+//			}
+//		}
+//
+//		return listMap;
+//	}
+
+	public static < T extends RealType< T > > ArrayList< Point > peakLocalMax(
 			RandomAccessibleInterval< T > source,
 			int radius ) {
 
-		Map< Integer, List > listMap = new HashMap< Integer, List >();
-		List xArray1 = new ArrayList();
-		List yArray1 = new ArrayList();
-		List centerList = new ArrayList();
-		listMap.put( 1, xArray1 );
-		listMap.put( 2, yArray1 );
-
+		ArrayList< Point > localMaxCoords = new ArrayList<>();
 		Interval interval = Intervals.expand( source, -1 );
 		source = Views.interval( source, interval );
 		final Cursor< T > center = Views.iterable( source ).cursor();
@@ -48,13 +75,13 @@ public class Utilities {
 			}
 			if ( isMaximum ) {
 
-				xArray1.add( ( double ) center.getIntPosition( 0 ) );
-				yArray1.add( ( double ) center.getIntPosition( 1 ) );
-				centerList.add( centerValue );
+				Point coords = new Point( center.numDimensions() );
+				coords.setPosition( center );
+				localMaxCoords.add( coords );
 			}
 		}
 
-		return listMap;
+		return localMaxCoords;
 	}
 
 	public static < T extends RealType< T > > RandomAccessibleInterval< T > rotate(
@@ -80,22 +107,12 @@ public class Utilities {
 class Wrapper< T > {
 
 	public final List< RandomAccessibleInterval< T > > listOfSegImages;
-	public final Img< T > overlayImage;
+//	public final Img< T > overlayImage;
+	public final RandomAccessibleInterval< T > overlayImage;
 
-	public Wrapper( List< RandomAccessibleInterval< T > > listOfSegImages, Img< T > overlayImage ) {
+	public Wrapper( List< RandomAccessibleInterval< T > > listOfSegImages, RandomAccessibleInterval< T > overlayImage ) {
 		this.listOfSegImages = listOfSegImages;
 		this.overlayImage = overlayImage;
 	}
 
 }
-
-//class WrapSegsAndOverlay< T > {
-//
-//	public final List< RandomAccessibleInterval< T > > trueSegmentations;
-//	public final RandomAccessibleInterval< T > overlayStackOverTime;
-//
-//	public WrapSegsAndOverlay( List< RandomAccessibleInterval< T > > trueSegmentations, RandomAccessibleInterval< T > overlayStackOverTime ) {
-//		this.trueSegmentations = trueSegmentations;
-//		this.overlayStackOverTime = overlayStackOverTime;
-//	}
-//}

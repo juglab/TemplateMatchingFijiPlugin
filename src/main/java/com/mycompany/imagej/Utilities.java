@@ -12,6 +12,7 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.RealRandomAccessible;
 import net.imglib2.algorithm.neighborhood.Neighborhood;
 import net.imglib2.algorithm.neighborhood.RectangleShape;
+import net.imglib2.img.Img;
 import net.imglib2.interpolation.randomaccess.NLinearInterpolatorFactory;
 import net.imglib2.realtransform.AffineTransform2D;
 import net.imglib2.realtransform.RealViews;
@@ -75,3 +76,26 @@ public class Utilities {
 		return ( view );
 	}
 }
+
+class Wrapper< T > {
+
+	public final List< RandomAccessibleInterval< T > > listOfSegImages;
+	public final Img< T > overlayImage;
+
+	public Wrapper( List< RandomAccessibleInterval< T > > listOfSegImages, Img< T > overlayImage ) {
+		this.listOfSegImages = listOfSegImages;
+		this.overlayImage = overlayImage;
+	}
+
+}
+
+//class WrapSegsAndOverlay< T > {
+//
+//	public final List< RandomAccessibleInterval< T > > trueSegmentations;
+//	public final RandomAccessibleInterval< T > overlayStackOverTime;
+//
+//	public WrapSegsAndOverlay( List< RandomAccessibleInterval< T > > trueSegmentations, RandomAccessibleInterval< T > overlayStackOverTime ) {
+//		this.trueSegmentations = trueSegmentations;
+//		this.overlayStackOverTime = overlayStackOverTime;
+//	}
+//}

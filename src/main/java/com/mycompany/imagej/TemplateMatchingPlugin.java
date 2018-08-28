@@ -150,17 +150,13 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 					detectionCoordsPerTime( template, thresholdmatch, slice );
 			List< RandomAccessibleInterval< T > > segImagesBucketPerTime =
 					calculateNonIntersectSegStackPerTime( slice, segRadius, localMaximaCoords );
-//			List< RandomAccessibleInterval< T > > segImagesBucketPerTime = wrapper.listOfSegImages;
-//			RandomAccessibleInterval< T > overlayPerTime = wrapper.overlayImage;
 			maxStackSize = Math.max( maxStackSize, segImagesBucketPerTime.size() );
 			RandomAccessibleInterval< T > nonIntersectSegStackPerTime = Views.stack( segImagesBucketPerTime );
 			multiTimeSegStack.add( nonIntersectSegStackPerTime );
-//			multiTimeOverlay.add( overlayPerTime );
 
 		}
-		RandomAccessibleInterval< T > overlayStackOverTime = Views.stack( multiTimeOverlay );
 
-		return createSegmentationOutput( saveDir, imp, multiTimeSegStack, maxStackSize, overlayStackOverTime );
+		return createSegmentationOutput( saveDir, imp, multiTimeSegStack, maxStackSize );
 	}
 
 
@@ -170,8 +166,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 			final File saveDir,
 			RandomAccessibleInterval< T > imp,
 			List< RandomAccessibleInterval< T > > multiTimeSegStack,
-			int maxStackSize,
-			RandomAccessibleInterval< T > overlayStackOverTime ) {
+			int maxStackSize ) {
 
 		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ) };
 		RandomAccessibleInterval< T > blankImage = new PlanarImgFactory( Util.getTypeFromInterval( imp ) ).create( blankImDims );
@@ -245,6 +240,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 					continue;
 				}
 ////////////////////////////////Need checking for point coordinates access in specified dimensions
+				Point point = localMaximaCoords.get( 0 );
 				int fromRow = ( localMaximaCoords.get( i ).getIntPosition( 0 ) - drawSegRadius );
 				int toRow = ( localMaximaCoords.get( i ).getIntPosition( 0 ) + drawSegRadius );
 				int fromCol = ( localMaximaCoords.get( i ).getIntPosition( 1 ) - drawSegRadius );
@@ -292,6 +288,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 				segImagesBucket.add( segImage );
 			}
 		}
+		System.out.println( segImagesBucket.size() );
 		return segImagesBucket;
 	}
 
@@ -299,12 +296,10 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 			RandomAccessibleInterval< T > template,
 			double thresholdmatch,
 			RandomAccessibleInterval< T > raiImg ) {
-//		List< Object > maximaPerTemplate = new ArrayList<>();
-//		List< Object > anglePerTemplate = new ArrayList<>();
 
 		T t = Util.getTypeFromInterval( raiImg );
 		Img< T > img = ImgView.wrap( raiImg, new ArrayImgFactory<>( t ) );
-//		Img< T > imgCopy = img.copy();
+
 		RandomAccessibleInterval< T > imgSmooth = gaussSmooth( raiImg );
 
 		//Normalize smoothed image

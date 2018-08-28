@@ -444,9 +444,15 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		//Split the image movie in 2D images and store them in list
 		final List< RandomAccessibleInterval< T > > imageBucket =
 				new ArrayList< RandomAccessibleInterval< T > >();
-		for ( int sliceNumber = 0; sliceNumber < imp.dimension( 2 ); sliceNumber++ ) {
-			RandomAccessibleInterval< T > rai = Views.hyperSlice( imp, 2, sliceNumber );
-			imageBucket.add( rai );
+		if(imp.dimension( 2 )>1) {
+			for ( int sliceNumber = 0; sliceNumber < imp.dimension( 2 ); sliceNumber++ ) {
+				RandomAccessibleInterval< T > rai = Views.hyperSlice( imp, 2, sliceNumber );
+				imageBucket.add( rai );
+			}
+		}
+		else {
+				imageBucket.add( imp );
+
 		}
 		return imageBucket;
 	}

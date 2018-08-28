@@ -117,11 +117,11 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		ImgPlus< T > template = ( ImgPlus< T > ) templateFile.getImgPlus();
 		double thresholdmatch = threshold;
 		StatusService statusService = this.statusService;
-		List< RandomAccessibleInterval< T > > trueSegmentationsAndOverlay =
+		List< RandomAccessibleInterval< T > > trueSegmentations =
 				templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
 
-		for ( Object results : trueSegmentationsAndOverlay )
-			uiService.show( results );
+//		for ( Object results : trueSegmentations )
+//			uiService.show( results );
 	}
 
 	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > templateMatching(
@@ -134,7 +134,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		final List< RandomAccessibleInterval< T > > imageBucket = sliceImage( imp );
 
 		List< RandomAccessibleInterval< T > > multiTimeSegStack = new ArrayList<>();
-		List< RandomAccessibleInterval< T > > multiTimeOverlay = new ArrayList<>();
 		int maxStackSize = 0;
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
@@ -192,7 +191,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 			IJ.save( segPlus, savePathName );
 		}
-//		trueSegmentations.add( overlayStackOverTime );
 		return trueSegmentations;
 	}
 
@@ -200,12 +198,8 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 			RandomAccessibleInterval< T > template,
 			double thresholdmatch,
 			RandomAccessibleInterval< T > raiImg ) {
-		//Gaussian Smoothing of Image
-		T t = Util.getTypeFromInterval( raiImg );
 		Map< Integer, Img< T > > hitmap = computeThresholdedMatchingPoints( template, thresholdmatch, raiImg ); //Return maxHitsIntensity and maxHits
 		Img< T > maxHitsIntensity = hitmap.get( 1 );
-		Img< T > maxHits = hitmap.get( 2 );
-		RandomAccessibleInterval< T > imgCopy = raiImg;
 
 		//Peak Local Maximum detection
 		int radius = 1;
@@ -229,9 +223,11 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 			repeat = false;
 			RandomAccessibleInterval< T > segImage = raiImg;
-			RandomAccessibleInterval< T > overlayImage = raiImg;
+//			uiService.show( segImage );
+//			RandomAccessibleInterval< T > overlayImage = raiImg;
 
 			LoopBuilder.setImages( segImage ).forEachPixel( pixel -> pixel.setZero() );
+
 
 			for ( int i = 0; i < localMaximaCoords.size(); i++ ) {
 
@@ -240,7 +236,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 					continue;
 				}
 ////////////////////////////////Need checking for point coordinates access in specified dimensions
-				Point point = localMaximaCoords.get( 0 );
 				int fromRow = ( localMaximaCoords.get( i ).getIntPosition( 0 ) - drawSegRadius );
 				int toRow = ( localMaximaCoords.get( i ).getIntPosition( 0 ) + drawSegRadius );
 				int fromCol = ( localMaximaCoords.get( i ).getIntPosition( 1 ) - drawSegRadius );
@@ -261,16 +256,12 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 				if ( searchMax == 0 ) {
 
 					RandomAccess< T > drawingAccessor = segImage.randomAccess();
-					RandomAccess< T > drawingOverlayAccessor = overlayImage.randomAccess();
 					///////////Check here too!
-					double xDrawPoint = localMaximaCoords.get( i ).getDoublePosition( 0 );
-					double yDrawPoint = localMaximaCoords.get( i ).getDoublePosition( 1 );
+					int xDrawPoint = localMaximaCoords.get( i ).getIntPosition( 0 );
+					int yDrawPoint = localMaximaCoords.get( i ).getIntPosition( 1 );
 					//////////
-					drawingAccessor.setPosition( ( int ) xDrawPoint, 0 );
-					drawingAccessor.setPosition( ( int ) yDrawPoint, 1 );
-					drawingOverlayAccessor.setPosition( ( int ) xDrawPoint, 0 );
-					drawingOverlayAccessor.setPosition( ( int ) yDrawPoint, 1 );
-					drawingOverlayAccessor.get().setZero();
+					drawingAccessor.setPosition( xDrawPoint, 0 );
+					drawingAccessor.setPosition( yDrawPoint, 1 );
 					HyperSphere< T > hyperSphere = new HyperSphere<>( segImage, drawingAccessor, drawSegRadius );
 
 					// set every value inside the sphere to 1
@@ -283,12 +274,16 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 				}
 
 			}
-
+			uiService.show( segImage );
+			System.out.println( repeat );
 			if ( repeat ) {
 				segImagesBucket.add( segImage );
+//				for ( Object results : segImagesBucket )
+//					uiService.show( results );
 			}
 		}
-		System.out.println( segImagesBucket.size() );
+//		for ( Object results : segImagesBucket )
+//			uiService.show( results );
 		return segImagesBucket;
 	}
 
@@ -299,7 +294,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 		T t = Util.getTypeFromInterval( raiImg );
 		Img< T > img = ImgView.wrap( raiImg, new ArrayImgFactory<>( t ) );
-
+		//Gaussian Smoothing of Image
 		RandomAccessibleInterval< T > imgSmooth = gaussSmooth( raiImg );
 
 		//Normalize smoothed image
@@ -429,13 +424,19 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > sliceImage(
 			RandomAccessibleInterval< T > imp ) {
-		//Split the image movie in 2D images and store them in list
 		final List< RandomAccessibleInterval< T > > imageBucket =
 				new ArrayList< RandomAccessibleInterval< T > >();
-		for ( int sliceNumber = 0; sliceNumber < imp.dimension( 2 ); sliceNumber++ ) {
-			RandomAccessibleInterval< T > rai = Views.hyperSlice( imp, 2, sliceNumber );
-			imageBucket.add( rai );
+		if ( imp.dimension( 2 ) > 1 ) {
+			//Split the image movie in 2D images and store them in list
+
+			for ( int sliceNumber = 0; sliceNumber < imp.dimension( 2 ); sliceNumber++ ) {
+				RandomAccessibleInterval< T > rai = Views.hyperSlice( imp, 2, sliceNumber );
+				imageBucket.add( rai );
+			}
+		} else {
+			imageBucket.add( imp );
 		}
+
 		return imageBucket;
 	}
 

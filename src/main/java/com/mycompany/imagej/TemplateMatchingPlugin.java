@@ -120,8 +120,9 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		List< RandomAccessibleInterval< T > > trueSegmentations =
 				templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
 
-//		for ( Object results : trueSegmentations )
-//			uiService.show( results );
+		for ( Object results : trueSegmentations ) {
+			uiService.show( results );
+		}
 	}
 
 	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > templateMatching(
@@ -214,6 +215,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 			ArrayList< Point > localMaximaCoords ) {
 
 		List< RandomAccessibleInterval< T > > segImagesBucket = new ArrayList< RandomAccessibleInterval< T > >();
+
 		int drawSegRadius = segRadius;
 		//Create a list of all zeros to track which coordinates have been plotted
 		List< Integer > done = new ArrayList< Integer >( Collections.nCopies( localMaximaCoords.size(), 0 ) );
@@ -222,9 +224,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		while ( repeat ) {
 
 			repeat = false;
-			RandomAccessibleInterval< T > segImage = raiImg;
-//			uiService.show( segImage );
-//			RandomAccessibleInterval< T > overlayImage = raiImg;
+			RandomAccessibleInterval< T > segImage = ops.copy().rai( raiImg );
 
 			LoopBuilder.setImages( segImage ).forEachPixel( pixel -> pixel.setZero() );
 
@@ -235,12 +235,11 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 					continue;
 				}
-////////////////////////////////Need checking for point coordinates access in specified dimensions
 				int fromRow = ( localMaximaCoords.get( i ).getIntPosition( 0 ) - drawSegRadius );
 				int toRow = ( localMaximaCoords.get( i ).getIntPosition( 0 ) + drawSegRadius );
 				int fromCol = ( localMaximaCoords.get( i ).getIntPosition( 1 ) - drawSegRadius );
 				int toCol = ( localMaximaCoords.get( i ).getIntPosition( 1 ) + drawSegRadius );
-///////////////////////////////
+
 				double searchMax = 0;
 				RandomAccess< T > intersectingSegsAccessor = segImage.randomAccess();
 
@@ -274,16 +273,10 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 				}
 
 			}
-			uiService.show( segImage );
-			System.out.println( repeat );
 			if ( repeat ) {
 				segImagesBucket.add( segImage );
-//				for ( Object results : segImagesBucket )
-//					uiService.show( results );
 			}
 		}
-//		for ( Object results : segImagesBucket )
-//			uiService.show( results );
 		return segImagesBucket;
 	}
 
@@ -412,7 +405,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		T maxVal = Util.getTypeFromInterval( imgSmooth ).createVariable();
 		ops.stats().max( maxVal, Views.iterable( imgSmooth ) );
 		float inverse = 1.0f / maxVal.getRealFloat();
-
 		//Normalizing the image
 		LoopBuilder.setImages( imgSmooth ).forEachPixel( pixel -> pixel.mul( inverse ) );
 	}

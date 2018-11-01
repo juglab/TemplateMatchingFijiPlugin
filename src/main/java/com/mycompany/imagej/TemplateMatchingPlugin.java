@@ -7,9 +7,9 @@ import static org.bytedeco.javacpp.opencv_imgproc.matchTemplate;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -29,7 +29,9 @@ import io.scif.services.DatasetIOService;
 import net.imagej.Dataset;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
+import net.imagej.ops.OpService;
 import net.imglib2.Cursor;
+import net.imglib2.Point;
 import net.imglib2.RandomAccess;
 import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.algorithm.region.hypersphere.HyperSphere;
@@ -37,6 +39,7 @@ import net.imglib2.img.Img;
 import net.imglib2.img.ImgView;
 import net.imglib2.img.array.ArrayImgFactory;
 import net.imglib2.img.display.imagej.ImageJFunctions;
+import net.imglib2.img.planar.PlanarImgFactory;
 import net.imglib2.loops.LoopBuilder;
 import net.imglib2.type.NativeType;
 import net.imglib2.type.numeric.RealType;
@@ -52,16 +55,13 @@ import net.imglib2.view.Views;
 
 @Plugin( menuPath = "Plugins>Segmentation>Template Matching Segmentation", type = Command.class )
 
-public class TemplateMatchingPlugin implements Command {
+public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > > implements Command {
 
 	@Parameter
 	private ImageJ ij;
 
 	@Parameter
 	DatasetIOService datasetIOService;
-
-//	@Parameter
-//	private Dataset dataset;
 
 	@Parameter( label = "Image to load" )
 	private File inputImage;
@@ -72,8 +72,12 @@ public class TemplateMatchingPlugin implements Command {
 	@Parameter( style = "directory" )
 	private File saveResultsDir;
 
-	@Parameter( label = "Segmentation circle radius" )
-	private int segCircleRad;
+	@Parameter( label = "Segmentation circle radius", persist = false, min = "1" )
+	private int segCircleRad = 3;
+
+	@Parameter( label = "Matching Threshold", persist = false, min = "0.1", max = "1.0", stepSize = "0.05" )
+	private double threshold = 0.3;
+
 
 	@Parameter
 	StatusService statusService;
@@ -81,12 +85,14 @@ public class TemplateMatchingPlugin implements Command {
 	@Parameter
 	UIService uiService;
 
+	@Parameter
+	private OpService ops;
+
 	public static void main( String[] args ) throws IOException {
 
 		final ImageJ ij = new ImageJ();
 		ij.ui().showUI();
 		ij.command().run( TemplateMatchingPlugin.class, true );
-
 	}
 
 	@Override
@@ -99,7 +105,7 @@ public class TemplateMatchingPlugin implements Command {
 
 	}
 
-	private < T extends RealType< T > & NativeType< T > > void templateMatching()
+	private void templateMatching()
 			throws Exception {
 		
 		Dataset imagefile = datasetIOService.open( inputImage.getAbsolutePath() );
@@ -109,25 +115,26 @@ public class TemplateMatchingPlugin implements Command {
 
 		ImgPlus< T > imp = ( ImgPlus< T > ) imagefile.getImgPlus();
 		ImgPlus< T > template = ( ImgPlus< T > ) templateFile.getImgPlus();
-		double thresholdmatch = 0.3;
+		double thresholdmatch = threshold;
 		StatusService statusService = this.statusService;
+		List< RandomAccessibleInterval< T > > trueSegmentations =
+				templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
 
-		List trueSegmentations = templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
-
-		for( Object trueSegmentation : trueSegmentations )
-			uiService.show( trueSegmentation );
+		for ( Object results : trueSegmentations ) {
+			uiService.show( results );
+		}
 	}
 
-	private < T extends RealType< T > & NativeType< T > > List templateMatching(
+	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > templateMatching(
 			File saveDir,
 			int segRadius,
-			ImgPlus< T > imp,
-			ImgPlus< T > template,
+			RandomAccessibleInterval< T > imp,
+			RandomAccessibleInterval< T > template,
 			double thresholdmatch,
 			StatusService statusService ) {
 		final List< RandomAccessibleInterval< T > > imageBucket = sliceImage( imp );
 
-		List multiTimeSegStack = new ArrayList();
+		List< RandomAccessibleInterval< T > > multiTimeSegStack = new ArrayList<>();
 		int maxStackSize = 0;
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
@@ -135,16 +142,19 @@ public class TemplateMatchingPlugin implements Command {
 				statusService.showStatus(
 						imageNumber,
 						imageBucket.size(),
-						"Processing Image" + " " + String.valueOf( imageNumber ) + "/" + String.valueOf( imageBucket.size() ) );
+						"Processing Image" + " " + String.valueOf( imageNumber + 1 ) + "/" + String.valueOf( imageBucket.size() ) );
 			}
+
 			RandomAccessibleInterval< T > slice = imageBucket.get( imageNumber );
-			List segImagesBucketPerTime = calculateNonIntersectSegStackPerTime( segRadius, template, thresholdmatch, slice );
-
+			ArrayList< Point > localMaximaCoords =
+					detectionCoordsPerTime( template, thresholdmatch, slice );
+			List< RandomAccessibleInterval< T > > segImagesBucketPerTime =
+					calculateNonIntersectSegStackPerTime( slice, segRadius, localMaximaCoords );
 			maxStackSize = Math.max( maxStackSize, segImagesBucketPerTime.size() );
-			RandomAccessibleInterval nonIntersectSegStackPerTime = Views.stack( segImagesBucketPerTime );
+			RandomAccessibleInterval< T > nonIntersectSegStackPerTime = Views.stack( segImagesBucketPerTime );
 			multiTimeSegStack.add( nonIntersectSegStackPerTime );
-		}
 
+		}
 
 		return createSegmentationOutput( saveDir, imp, multiTimeSegStack, maxStackSize );
 	}
@@ -152,27 +162,28 @@ public class TemplateMatchingPlugin implements Command {
 
 	///All key method implementations below
 
-	private static < T extends RealType< T > & NativeType< T > > List createSegmentationOutput(
+	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > createSegmentationOutput(
 			final File saveDir,
-			ImgPlus< T > imp,
-			List multiTimeSegStack,
+			RandomAccessibleInterval< T > imp,
+			List< RandomAccessibleInterval< T > > multiTimeSegStack,
 			int maxStackSize ) {
+
 		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ) };
-		RandomAccessibleInterval< T > blankImage = imp.getImg().factory().create( blankImDims );
-		List trueSegmentations = new ArrayList();
+		RandomAccessibleInterval< T > blankImage = new PlanarImgFactory( Util.getTypeFromInterval( imp ) ).create( blankImDims );
+		List< RandomAccessibleInterval< T > > trueSegmentations = new ArrayList<>();
 		for ( int index = 0; index < maxStackSize; index++ ) {
-			ArrayList trueSegImageBucket = new ArrayList();
+			ArrayList< RandomAccessibleInterval< T > > trueSegImageBucket = new ArrayList<>();
 			for ( int k = 0; k < multiTimeSegStack.size(); k++ ) {
-				RandomAccessibleInterval singleStack = ( RandomAccessibleInterval ) multiTimeSegStack.get( k );
+				RandomAccessibleInterval< T > singleStack = multiTimeSegStack.get( k );
 				if ( index >= singleStack.dimension( 2 ) ) {
 					trueSegImageBucket.add( blankImage );
 				} else {
-					RandomAccessibleInterval hyperslice = Views.hyperSlice( singleStack, 2, index );
+					RandomAccessibleInterval< T > hyperslice = Views.hyperSlice( singleStack, 2, index );
 
 					trueSegImageBucket.add( hyperslice );
 				}
 			}
-			RandomAccessibleInterval trueSegmentation = Views.stack( trueSegImageBucket );
+			RandomAccessibleInterval< T > trueSegmentation = Views.stack( trueSegImageBucket );
 			trueSegmentations.add( trueSegmentation );
 			ImagePlus segPlus = ImageJFunctions.wrap( trueSegmentation, null );
 			String strIndex = String.valueOf( index );
@@ -184,43 +195,117 @@ public class TemplateMatchingPlugin implements Command {
 		return trueSegmentations;
 	}
 
-	private < T extends RealType< T > & NativeType< T > > List calculateNonIntersectSegStackPerTime(
-			final int segRadius,
-			ImgPlus< T > template,
+	private < T extends RealType< T > & NativeType< T > > ArrayList< Point > detectionCoordsPerTime(
+			RandomAccessibleInterval< T > template,
 			double thresholdmatch,
 			RandomAccessibleInterval< T > raiImg ) {
-		List detections = new ArrayList();
-		List xDetections = new ArrayList();
-		List yDetections = new ArrayList();
-		List maximaPerTemplate = new ArrayList();
-		List anglePerTemplate = new ArrayList();
+		Map< Integer, Img< T > > hitmap = computeThresholdedMatchingPoints( template, thresholdmatch, raiImg ); //Return maxHitsIntensity and maxHits
+		Img< T > maxHitsIntensity = hitmap.get( 1 );
 
-		//Gaussian Smoothing of Image
+		//Peak Local Maximum detection
+		int radius = 1;
+		ArrayList< Point > localMaximaCoords = Utilities.peakLocalMax( maxHitsIntensity, radius );
+		System.out.println( localMaximaCoords.size() );
+		return localMaximaCoords;
+	}
+	
+	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > calculateNonIntersectSegStackPerTime(
+			RandomAccessibleInterval< T > raiImg,
+			final int segRadius,
+			ArrayList< Point > localMaximaCoords ) {
+
+		List< RandomAccessibleInterval< T > > segImagesBucket = new ArrayList< RandomAccessibleInterval< T > >();
+
+		int drawSegRadius = segRadius;
+		//Create a list of all zeros to track which coordinates have been plotted
+		List< Integer > done = new ArrayList< Integer >( Collections.nCopies( localMaximaCoords.size(), 0 ) );
+
+		boolean repeat = true;
+		while ( repeat ) {
+
+			repeat = false;
+			RandomAccessibleInterval< T > segImage = ops.copy().rai( raiImg );
+
+			LoopBuilder.setImages( segImage ).forEachPixel( pixel -> pixel.setZero() );
+
+
+			for ( int i = 0; i < localMaximaCoords.size(); i++ ) {
+
+				if ( done.get( i ) == 1 ) {
+
+					continue;
+				}
+				int fromRow = ( localMaximaCoords.get( i ).getIntPosition( 0 ) - drawSegRadius );
+				int toRow = ( localMaximaCoords.get( i ).getIntPosition( 0 ) + drawSegRadius );
+				int fromCol = ( localMaximaCoords.get( i ).getIntPosition( 1 ) - drawSegRadius );
+				int toCol = ( localMaximaCoords.get( i ).getIntPosition( 1 ) + drawSegRadius );
+
+				double searchMax = 0;
+				RandomAccess< T > intersectingSegsAccessor = segImage.randomAccess();
+
+				for ( int row = fromRow; row < toRow; row++ ) {
+					for ( int col = fromCol; col < toCol; col++ ) {
+						intersectingSegsAccessor.setPosition( row, 0 );
+						intersectingSegsAccessor.setPosition( col, 1 );
+						if ( intersectingSegsAccessor.get().getRealDouble() > 0 ) {
+							searchMax = intersectingSegsAccessor.get().getRealDouble();
+						}
+					}
+				}
+				if ( searchMax == 0 ) {
+
+					RandomAccess< T > drawingAccessor = segImage.randomAccess();
+					///////////Check here too!
+					int xDrawPoint = localMaximaCoords.get( i ).getIntPosition( 0 );
+					int yDrawPoint = localMaximaCoords.get( i ).getIntPosition( 1 );
+					//////////
+					drawingAccessor.setPosition( xDrawPoint, 0 );
+					drawingAccessor.setPosition( yDrawPoint, 1 );
+					HyperSphere< T > hyperSphere = new HyperSphere<>( segImage, drawingAccessor, drawSegRadius );
+
+					// set every value inside the sphere to 1
+					for ( T value : hyperSphere ) {
+						value.setOne();
+					}
+					done.set( i, 1 );
+					repeat = true;
+
+				}
+
+			}
+			if ( repeat ) {
+				segImagesBucket.add( segImage );
+			}
+		}
+		return segImagesBucket;
+	}
+
+	private < T extends RealType< T > & NativeType< T > > Map< Integer, Img< T > > computeThresholdedMatchingPoints(
+			RandomAccessibleInterval< T > template,
+			double thresholdmatch,
+			RandomAccessibleInterval< T > raiImg ) {
+
 		T t = Util.getTypeFromInterval( raiImg );
 		Img< T > img = ImgView.wrap( raiImg, new ArrayImgFactory<>( t ) );
-		Img< T > imgCopy = img.copy();
-		RandomAccessibleInterval< FloatType > imgSmooth = gaussSmooth( raiImg );
+		//Gaussian Smoothing of Image
+		RandomAccessibleInterval< T > imgSmooth = gaussSmooth( raiImg );
 
 		//Normalize smoothed image
 		normalizeImage( imgSmooth );
 
+		ImagePlus wrappedImage = ImageJFunctions.wrap( raiImg, "Original Image" );
+		
 		//Converters
 		ImagePlusMatConverter ic = new ImagePlusMatConverter();
 		MatImagePlusConverter mip = new MatImagePlusConverter();
-
-		ImagePlus wrappedImage = ImageJFunctions.wrap( raiImg, "Original Image" );
-		ImagePlus wrappedSmoothImage = ImageJFunctions.wrap( imgSmooth, "Smooth Image" );
-
 		// Convert the image to OpenCV image
 		opencv_core.Mat cvImage = ic.convert( wrappedImage, Mat.class );
-		opencv_core.Mat cvSmoothImage = ic.convert( wrappedSmoothImage, Mat.class );
 
 		Img< T > maxHitsIntensity = img.copy();
 		LoopBuilder.setImages( maxHitsIntensity ).forEachPixel( pixel -> pixel.setZero() );
 		Img< T > maxHits = maxHitsIntensity.copy();
 		Img< T > maxHitsAngle = maxHitsIntensity.copy();
 		LoopBuilder.setImages( maxHitsAngle ).forEachPixel( pixel -> pixel.setReal( -1 ) );
-		Img< T > drawImage = maxHitsIntensity.copy(); //Output segmentation image object
 
 		int tH = ( int ) template.dimension( 1 );
 		int tW = ( int ) template.dimension( 0 );
@@ -229,51 +314,7 @@ public class TemplateMatchingPlugin implements Command {
 		int padHTo = ( int ) ( raiImg.dimension( 1 ) - padHFrom + 1 );
 		int padWTo = ( int ) ( raiImg.dimension( 0 ) - padWFrom + 1 );
 
-		List segImagesBucket = doTemplateMatching(
-				segRadius,
-				template,
-				thresholdmatch,
-				detections,
-				xDetections,
-				yDetections,
-				maximaPerTemplate,
-				anglePerTemplate,
-				img,
-				imgSmooth,
-				ic,
-				mip,
-				cvImage,
-				maxHitsIntensity,
-				maxHits,
-				maxHitsAngle,
-				padHFrom,
-				padWFrom,
-				padHTo,
-				padWTo );
-		return segImagesBucket;
-	}
 
-	private < T extends RealType< T > & NativeType< T > > List doTemplateMatching(
-			final int segRadius,
-			ImgPlus< T > template,
-			double thresholdmatch,
-			List detections,
-			List xDetections,
-			List yDetections,
-			List maximaPerTemplate,
-			List anglePerTemplate,
-			Img< T > img,
-			RandomAccessibleInterval< FloatType > imgSmooth,
-			ImagePlusMatConverter ic,
-			MatImagePlusConverter mip,
-			opencv_core.Mat cvImage,
-			Img< T > maxHitsIntensity,
-			Img< T > maxHits,
-			Img< T > maxHitsAngle,
-			int padHFrom,
-			int padWFrom,
-			int padHTo,
-			int padWTo ) {
 		for ( int angle = 0; angle < 180; angle = angle + 3 ) {
 
 			//Rotate template
@@ -317,18 +358,16 @@ public class TemplateMatchingPlugin implements Command {
 			} );
 
 			// Finding coordinates where results is greater than a certain threshold(in this case 0.3)
-			ArrayList xhits = new ArrayList();
-			ArrayList yhits = new ArrayList();
+			ArrayList< Point > hits = new ArrayList<>();
 
 			Cursor< T > cursor = results.cursor();
-			int[] hitCoords = new int[ cursor.numDimensions() ];
 			while ( cursor.hasNext() ) {
 				cursor.fwd();
 				double intensity = cursor.get().getRealDouble();
 				if ( intensity >= thresholdmatch ) {
-					cursor.localize( hitCoords );
-					xhits.add( hitCoords[ 0 ] );
-					yhits.add( hitCoords[ 1 ] );
+					Point hitCoords = new Point( cursor.numDimensions() );
+					hitCoords.setPosition( cursor );
+					hits.add( hitCoords );
 				}
 			}
 
@@ -338,18 +377,13 @@ public class TemplateMatchingPlugin implements Command {
 			RandomAccess< T > maxHitsAngleAccessor = maxHitsAngle.randomAccess();
 			RandomAccess< T > resultsAccessor = resCopy.randomAccess();
 
-			for ( int i = 0; i < xhits.size(); i++ ) {
+			for ( int i = 0; i < hits.size(); i++ ) {
 
-				maxHitsIntensityAccessor.setPosition( ( int ) xhits.get( i ), 0 );
-				maxHitsIntensityAccessor.setPosition( ( int ) yhits.get( i ), 1 );
-				resTimesIntensityAccessor.setPosition( ( int ) xhits.get( i ), 0 );
-				resTimesIntensityAccessor.setPosition( ( int ) yhits.get( i ), 1 );
-				maxHitsAccessor.setPosition( ( int ) xhits.get( i ), 0 );
-				maxHitsAccessor.setPosition( ( int ) yhits.get( i ), 1 );
-				resultsAccessor.setPosition( ( int ) xhits.get( i ), 0 );
-				resultsAccessor.setPosition( ( int ) yhits.get( i ), 1 );
-				maxHitsAngleAccessor.setPosition( ( int ) xhits.get( i ), 0 );
-				maxHitsAngleAccessor.setPosition( ( int ) yhits.get( i ), 1 );
+				maxHitsIntensityAccessor.setPosition( hits.get( i ) );
+				resTimesIntensityAccessor.setPosition( hits.get( i ) );
+				maxHitsAccessor.setPosition( hits.get( i ) );
+				resultsAccessor.setPosition( hits.get( i ) );
+				maxHitsAngleAccessor.setPosition( hits.get( i ) );
 
 				if ( maxHitsIntensityAccessor.get().getRealFloat() < resTimesIntensityAccessor.get().getRealFloat() ) {
 					maxHitsIntensityAccessor.get().setReal( resTimesIntensityAccessor.get().getRealFloat() );
@@ -359,135 +393,57 @@ public class TemplateMatchingPlugin implements Command {
 				}
 			}
 		}
+		Map< Integer, Img< T > > hitMap = new HashMap< Integer, Img< T > >();
+		hitMap.put( 1, maxHitsIntensity );
+		hitMap.put( 2, maxHits );
+		return hitMap;
 
-		//Peak Local Maximum detection
-
-		int radius = 1;
-		Map< Integer, List > lists = Utilities.peakLocalMax( maxHitsIntensity, radius );
-		List< Double > xDetectionsPerTemplate = lists.get( 1 );
-		List< Double > yDetectionsPerTemplate = lists.get( 2 );
-
-		List< Map.Entry > detectionsPerTemplate = new ArrayList<>( xDetectionsPerTemplate.size() );
-		if ( yDetectionsPerTemplate.size() == xDetectionsPerTemplate.size() ) {
-
-			for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
-				detectionsPerTemplate
-						.add( new AbstractMap.SimpleEntry( xDetectionsPerTemplate.get( i ), yDetectionsPerTemplate.get( i ) ) );
-			}
-		}
-		System.out.println( detectionsPerTemplate.size() );
-		RandomAccess< T > maxHitsSecondaryAccessor = maxHits.randomAccess();
-		RandomAccess< T > maxHitsAngleSecondaryAccessor = maxHitsAngle.randomAccess();
-
-		for ( int i = 0; i < xDetectionsPerTemplate.size(); i++ ) {
-			double xPoint = xDetectionsPerTemplate.get( i );
-			double ypoint = yDetectionsPerTemplate.get( i );
-			maxHitsSecondaryAccessor.setPosition( ( int ) xPoint, 0 );
-			maxHitsSecondaryAccessor.setPosition( ( int ) ypoint, 1 );
-			maxHitsAngleSecondaryAccessor.setPosition( ( int ) xPoint, 0 );
-			maxHitsAngleSecondaryAccessor.setPosition( ( int ) ypoint, 1 );
-			maximaPerTemplate.add( maxHitsSecondaryAccessor.get().getRealFloat() );
-			anglePerTemplate.add( maxHitsAngleSecondaryAccessor.get().getRealFloat() );
-
-		}
-		detections.addAll( detectionsPerTemplate );
-		xDetections.addAll( xDetectionsPerTemplate );
-		yDetections.addAll( yDetectionsPerTemplate );
-		System.out.println( detections.size() );
-		System.out.println( "done!" );
-
-		/// I will implement overlay here
-
-		/// Overlay end
-
-		List segImagesBucket = new ArrayList();
-		int drawSegRadius = segRadius;
-		//Create a list of all zeros to track which coordinates have been plotted
-		List< Integer > done = new ArrayList< Integer >( Collections.nCopies( detections.size(), 0 ) );
-
-		boolean repeat = true;
-		while ( repeat ) {
-
-			repeat = false;
-			Img< T > segImage = img.copy();
-			LoopBuilder.setImages( segImage ).forEachPixel( pixel -> pixel.setZero() );
-
-			for ( int i = 0; i < detections.size(); i++ ) {
-
-				if ( done.get( i ) == 1 ) {
-
-					continue;
-				}
-
-				int fromRow = ( int ) ( xDetectionsPerTemplate.get( i ) - drawSegRadius );
-				int toRow = ( int ) ( xDetectionsPerTemplate.get( i ) + drawSegRadius );
-				int fromCol = ( int ) ( yDetectionsPerTemplate.get( i ) - drawSegRadius );
-				int toCol = ( int ) ( yDetectionsPerTemplate.get( i ) + drawSegRadius );
-
-				double searchMax = 0;
-				RandomAccess< T > intersectingSegsAccessor = segImage.randomAccess();
-
-				for ( int row = fromRow; row < toRow; row++ ) {
-					for ( int col = fromCol; col < toCol; col++ ) {
-						intersectingSegsAccessor.setPosition( row, 0 );
-						intersectingSegsAccessor.setPosition( col, 1 );
-						if ( intersectingSegsAccessor.get().getRealDouble() > 0 ) {
-							searchMax = intersectingSegsAccessor.get().getRealDouble();
-						}
-					}
-				}
-				if ( searchMax == 0 ) {
-
-					RandomAccess< T > drawingAccessor = segImage.randomAccess();
-					double xDrawPoint = xDetectionsPerTemplate.get( i );
-					double yDrawPoint = yDetectionsPerTemplate.get( i );
-					drawingAccessor.setPosition( ( int ) xDrawPoint, 0 );
-					drawingAccessor.setPosition( ( int ) yDrawPoint, 1 );
-					HyperSphere< T > hyperSphere = new HyperSphere<>( segImage, drawingAccessor, drawSegRadius );
-
-					// set every value inside the sphere to 1
-					for ( T value : hyperSphere ) {
-						value.setOne();
-					}
-					done.set( i, 1 );
-					repeat = true;
-
-				}
-
-			}
-
-
-			if ( repeat ) {
-				segImagesBucket.add( segImage );
-			}
-		}
-		return segImagesBucket;
 	}
 
 
-	private void normalizeImage( RandomAccessibleInterval< FloatType > imgSmooth ) {
-		FloatType maxVal = new FloatType();
-		ij.op().stats().max( maxVal, Views.iterable( imgSmooth ) );
+	private < T extends RealType< T > > void normalizeImage( RandomAccessibleInterval< T > imgSmooth ) {
+		T maxVal = Util.getTypeFromInterval( imgSmooth ).createVariable();
+		ops.stats().max( maxVal, Views.iterable( imgSmooth ) );
 		float inverse = 1.0f / maxVal.getRealFloat();
-
 		//Normalizing the image
 		LoopBuilder.setImages( imgSmooth ).forEachPixel( pixel -> pixel.mul( inverse ) );
 	}
 
-	private < T extends RealType< T > & NativeType< T > > RandomAccessibleInterval< FloatType > gaussSmooth( RandomAccessibleInterval< T > raiImg ) {
+	private < T extends RealType< T > & NativeType< T > > RandomAccessibleInterval< T > gaussSmooth( RandomAccessibleInterval< T > raiImg ) {
 		double[] sigmas = { 1.5, 1.5 };
-		RandomAccessibleInterval< FloatType > imgSmooth = ij.op().filter().gauss( raiImg, sigmas );
-		return imgSmooth;
+		return ops.filter().gauss( raiImg, sigmas );
 	}
 
-	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > sliceImage( ImgPlus< T > imp ) {
-		//Split the image movie in 2D images and store them in list
+	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > sliceImage(
+			RandomAccessibleInterval< T > imp ) {
 		final List< RandomAccessibleInterval< T > > imageBucket =
 				new ArrayList< RandomAccessibleInterval< T > >();
-		for ( int sliceNumber = 0; sliceNumber < imp.dimension( 2 ); sliceNumber++ ) {
-			RandomAccessibleInterval< T > rai = Views.hyperSlice( imp, 2, sliceNumber );
-			imageBucket.add( rai );
+		if ( imp.dimension( 2 ) > 1 ) {
+			//Split the image movie in 2D images and store them in list
+
+			for ( int sliceNumber = 0; sliceNumber < imp.dimension( 2 ); sliceNumber++ ) {
+				RandomAccessibleInterval< T > rai = Views.hyperSlice( imp, 2, sliceNumber );
+				imageBucket.add( rai );
+			}
+		} else {
+			imageBucket.add( imp );
 		}
+
 		return imageBucket;
 	}
+
+	public List< RandomAccessibleInterval< T > > calculate(
+			RandomAccessibleInterval< T > rawData,
+			RandomAccessibleInterval< T > template,
+			int segmentationRadius,
+			double matchingThreshold ) {
+		return templateMatching(
+				new File( "/Users/prakash/Desktop/TemplateMatchingSegsButton" ),
+				segmentationRadius,
+				rawData,
+				template,
+				matchingThreshold,
+				null );
+	}
+
 }

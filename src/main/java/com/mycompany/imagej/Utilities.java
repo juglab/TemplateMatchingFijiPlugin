@@ -1,9 +1,7 @@
 package com.mycompany.imagej;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import net.imagej.ImageJ;
+import ij.IJ;
+import ij.ImagePlus;
 import net.imglib2.Cursor;
 import net.imglib2.Interval;
 import net.imglib2.Point;
@@ -11,49 +9,20 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.RealRandomAccessible;
 import net.imglib2.algorithm.neighborhood.Neighborhood;
 import net.imglib2.algorithm.neighborhood.RectangleShape;
+import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.interpolation.randomaccess.NLinearInterpolatorFactory;
 import net.imglib2.realtransform.AffineTransform2D;
 import net.imglib2.realtransform.RealViews;
+import net.imglib2.type.numeric.NumericType;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.util.Intervals;
 import net.imglib2.view.Views;
 
-public class Utilities {
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
-//	public static < T extends RealType< T > > Map< Integer, List > peakLocalMax(
-//			RandomAccessibleInterval< T > source,
-//			int radius ) {
-//
-//		Map< Integer, List > listMap = new HashMap< Integer, List >();
-//		List xArray1 = new ArrayList();
-//		List yArray1 = new ArrayList();
-//		List centerList = new ArrayList();
-//		listMap.put( 1, xArray1 );
-//		listMap.put( 2, yArray1 );
-//
-//		Interval interval = Intervals.expand( source, -1 );
-//		source = Views.interval( source, interval );
-//		final Cursor< T > center = Views.iterable( source ).cursor();
-//		final RectangleShape shape = new RectangleShape( radius, true );
-//		for ( final Neighborhood< T > localNeighborhood : shape.neighborhoods( source ) ) {
-//			final T centerValue = center.next();
-//			boolean isMaximum = true;
-//			for ( final T value : localNeighborhood ) {
-//				if ( centerValue.compareTo( value ) <= 0 ) {
-//					isMaximum = false;
-//					break;
-//				}
-//			}
-//			if ( isMaximum ) {
-//
-//				xArray1.add( ( double ) center.getIntPosition( 0 ) );
-//				yArray1.add( ( double ) center.getIntPosition( 1 ) );
-//				centerList.add( centerValue );
-//			}
-//		}
-//
-//		return listMap;
-//	}
+public class Utilities {
 
 	public static < T extends RealType< T > > ArrayList< Point > peakLocalMax(
 			RandomAccessibleInterval< T > source,
@@ -85,7 +54,6 @@ public class Utilities {
 	}
 
 	public static < T extends RealType< T > > RandomAccessibleInterval< T > rotate(
-			final ImageJ ij,
 			RandomAccessibleInterval< T > template,
 			int angle ) {
 		long x = -template.dimension( 0 ) / 2;
@@ -98,21 +66,17 @@ public class Utilities {
 				RealViews.affineReal(
 						( Views.interpolate( Views.extendBorder( template ), new NLinearInterpolatorFactory() ) ),
 						transform );
-		RandomAccessibleInterval< T > view = Views.interval( Views.raster( realview ), template );
-//		ij.ui().show( view );
-		return ( view );
+		return Views.interval( Views.raster( realview ), template );
+	}
+
+	public static < T extends NumericType< T > > void saveImagesToDirectory( List< RandomAccessibleInterval< T > > images, File directory )
+	{
+		for ( int index = 0; index < images.size(); index++ )
+		{
+			RandomAccessibleInterval< T > image = images.get( index );
+			ImagePlus imagePlus = ImageJFunctions.wrap( image, null );
+			IJ.save( imagePlus, directory.getAbsolutePath() + "/" + index + ".tif" );
+		}
 	}
 }
 
-class Wrapper< T > {
-
-	public final List< RandomAccessibleInterval< T > > listOfSegImages;
-//	public final Img< T > overlayImage;
-	public final RandomAccessibleInterval< T > overlayImage;
-
-	public Wrapper( List< RandomAccessibleInterval< T > > listOfSegImages, RandomAccessibleInterval< T > overlayImage ) {
-		this.listOfSegImages = listOfSegImages;
-		this.overlayImage = overlayImage;
-	}
-
-}

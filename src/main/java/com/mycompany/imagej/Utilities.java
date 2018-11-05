@@ -20,41 +20,6 @@ import net.imglib2.view.Views;
 
 public class Utilities {
 
-//	public static < T extends RealType< T > > Map< Integer, List > peakLocalMax(
-//			RandomAccessibleInterval< T > source,
-//			int radius ) {
-//
-//		Map< Integer, List > listMap = new HashMap< Integer, List >();
-//		List xArray1 = new ArrayList();
-//		List yArray1 = new ArrayList();
-//		List centerList = new ArrayList();
-//		listMap.put( 1, xArray1 );
-//		listMap.put( 2, yArray1 );
-//
-//		Interval interval = Intervals.expand( source, -1 );
-//		source = Views.interval( source, interval );
-//		final Cursor< T > center = Views.iterable( source ).cursor();
-//		final RectangleShape shape = new RectangleShape( radius, true );
-//		for ( final Neighborhood< T > localNeighborhood : shape.neighborhoods( source ) ) {
-//			final T centerValue = center.next();
-//			boolean isMaximum = true;
-//			for ( final T value : localNeighborhood ) {
-//				if ( centerValue.compareTo( value ) <= 0 ) {
-//					isMaximum = false;
-//					break;
-//				}
-//			}
-//			if ( isMaximum ) {
-//
-//				xArray1.add( ( double ) center.getIntPosition( 0 ) );
-//				yArray1.add( ( double ) center.getIntPosition( 1 ) );
-//				centerList.add( centerValue );
-//			}
-//		}
-//
-//		return listMap;
-//	}
-
 	public static < T extends RealType< T > > ArrayList< Point > peakLocalMax(
 			RandomAccessibleInterval< T > source,
 			int radius ) {
@@ -101,15 +66,3 @@ public class Utilities {
 	}
 }
 
-class Wrapper< T > {
-
-	public final List< RandomAccessibleInterval< T > > listOfSegImages;
-//	public final Img< T > overlayImage;
-	public final RandomAccessibleInterval< T > overlayImage;
-
-	public Wrapper( List< RandomAccessibleInterval< T > > listOfSegImages, RandomAccessibleInterval< T > overlayImage ) {
-		this.listOfSegImages = listOfSegImages;
-		this.overlayImage = overlayImage;
-	}
-
-}

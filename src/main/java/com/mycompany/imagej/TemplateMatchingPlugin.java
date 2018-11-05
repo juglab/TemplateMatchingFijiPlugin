@@ -135,37 +135,38 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		final List< RandomAccessibleInterval< T > > imageBucket = sliceImage( imp );
 
 		List< RandomAccessibleInterval< T > > multiTimeSegStack = new ArrayList<>();
-		int maxStackSize = 0;
 
 		for ( int imageNumber = 0; imageNumber < imageBucket.size(); imageNumber++ ) {
 			if ( statusService != null ) {
 				statusService.showStatus(
 						imageNumber,
 						imageBucket.size(),
-						"Processing Image" + " " + String.valueOf( imageNumber + 1 ) + "/" + String.valueOf( imageBucket.size() ) );
+						"Processing Image" + " " + ( imageNumber + 1 ) + "/" + ( imageBucket.size() ) );
 			}
 
 			RandomAccessibleInterval< T > slice = imageBucket.get( imageNumber );
-			ArrayList< Point > localMaximaCoords =
-					detectionCoordsPerTime( template, thresholdmatch, slice );
-			List< RandomAccessibleInterval< T > > segImagesBucketPerTime =
-					calculateNonIntersectSegStackPerTime( slice, segRadius, localMaximaCoords );
-			maxStackSize = Math.max( maxStackSize, segImagesBucketPerTime.size() );
-			RandomAccessibleInterval< T > nonIntersectSegStackPerTime = Views.stack( segImagesBucketPerTime );
-			multiTimeSegStack.add( nonIntersectSegStackPerTime );
-
+			multiTimeSegStack.add( calculateFrame( segRadius, template, thresholdmatch, slice ) );
 		}
 
-		return reslice( multiTimeSegStack, maxStackSize );
+		return reslice( multiTimeSegStack );
 	}
 
+	private < T extends RealType< T > & NativeType< T > > RandomAccessibleInterval< T > calculateFrame( int segRadius, RandomAccessibleInterval< T > template, double thresholdmatch, RandomAccessibleInterval< T > slice )
+	{
+		ArrayList< Point > points =
+				detectionCoordsPerTime( template, thresholdmatch, slice );
+		List< RandomAccessibleInterval< T > > segImagesBucketPerTime =
+				drawNonIntersectingPoints( slice, segRadius, points );
+		return Views.stack( segImagesBucketPerTime );
+	}
 
 	///All key method implementations below
 
 	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > reslice(
-			List< RandomAccessibleInterval< T > > frames,
-			int maxStackSize ) {
-
+			List< RandomAccessibleInterval< T > > frames ) {
+		long maxStackSize = 0;
+		for(RandomAccessibleInterval< T > frame : frames)
+			maxStackSize = Math.max( maxStackSize, frame.dimension(2) );
 		List< RandomAccessibleInterval< T > > channels = new ArrayList<>();
 		for ( int index = 0; index < maxStackSize; index++ ) {
 			channels.add( extractChannel( frames, index ) );
@@ -211,7 +212,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		return localMaximaCoords;
 	}
 	
-	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > calculateNonIntersectSegStackPerTime(
+	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > drawNonIntersectingPoints(
 			RandomAccessibleInterval< T > raiImg,
 			final int segRadius,
 			ArrayList< Point > localMaximaCoords ) {

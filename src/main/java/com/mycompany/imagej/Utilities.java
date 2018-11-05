@@ -1,9 +1,7 @@
 package com.mycompany.imagej;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import net.imagej.ImageJ;
+import ij.IJ;
+import ij.ImagePlus;
 import net.imglib2.Cursor;
 import net.imglib2.Interval;
 import net.imglib2.Point;
@@ -11,12 +9,18 @@ import net.imglib2.RandomAccessibleInterval;
 import net.imglib2.RealRandomAccessible;
 import net.imglib2.algorithm.neighborhood.Neighborhood;
 import net.imglib2.algorithm.neighborhood.RectangleShape;
+import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.interpolation.randomaccess.NLinearInterpolatorFactory;
 import net.imglib2.realtransform.AffineTransform2D;
 import net.imglib2.realtransform.RealViews;
+import net.imglib2.type.numeric.NumericType;
 import net.imglib2.type.numeric.RealType;
 import net.imglib2.util.Intervals;
 import net.imglib2.view.Views;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Utilities {
 
@@ -63,6 +67,16 @@ public class Utilities {
 						( Views.interpolate( Views.extendBorder( template ), new NLinearInterpolatorFactory() ) ),
 						transform );
 		return Views.interval( Views.raster( realview ), template );
+	}
+
+	public static < T extends NumericType< T > > void saveImagesToDirectory( List< RandomAccessibleInterval< T > > images, File directory )
+	{
+		for ( int index = 0; index < images.size(); index++ )
+		{
+			RandomAccessibleInterval< T > image = images.get( index );
+			ImagePlus imagePlus = ImageJFunctions.wrap( image, null );
+			IJ.save( imagePlus, directory.getAbsolutePath() + "/" + index + ".tif" );
+		}
 	}
 }
 

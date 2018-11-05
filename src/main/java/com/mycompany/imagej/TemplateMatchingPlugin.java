@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
-import net.imglib2.type.numeric.NumericType;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -12,14 +11,11 @@ import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
 import org.scijava.ui.UIService;
 
-import ij.IJ;
-import ij.ImagePlus;
 import io.scif.services.DatasetIOService;
 import net.imagej.Dataset;
 import net.imagej.ImageJ;
 import net.imagej.ImgPlus;
 import net.imglib2.RandomAccessibleInterval;
-import net.imglib2.img.display.imagej.ImageJFunctions;
 import net.imglib2.type.NativeType;
 import net.imglib2.type.numeric.RealType;
 
@@ -91,21 +87,10 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		StatusService statusService = this.statusService;
 		List< RandomAccessibleInterval< T > > trueSegmentations =
 				new TemplateMatchingAlgorithm( context ).calculate( imp, template, segRadius, thresholdmatch, statusService );
-		saveImages( trueSegmentations, saveDir );
+		Utilities.saveImagesToDirectory( trueSegmentations, saveDir );
 
 		for ( Object results : trueSegmentations ) {
 			uiService.show( results );
 		}
 	}
-
-	public static < T extends NumericType< T > > void saveImages( List< RandomAccessibleInterval< T > > images, File directory )
-	{
-		for ( int index = 0; index < images.size(); index++ )
-		{
-			RandomAccessibleInterval< T > image = images.get( index );
-			ImagePlus imagePlus = ImageJFunctions.wrap( image, null );
-			IJ.save( imagePlus, directory.getAbsolutePath() + "/" + index + ".tif" );
-		}
-	}
-
 }

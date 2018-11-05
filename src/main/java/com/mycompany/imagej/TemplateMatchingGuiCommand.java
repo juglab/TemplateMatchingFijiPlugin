@@ -16,7 +16,6 @@ import org.scijava.log.Logger;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
 import org.scijava.ui.UIService;
-import org.scijava.ui.behaviour.util.RunnableAction;
 
 import javax.swing.*;
 import java.awt.event.WindowAdapter;
@@ -79,7 +78,7 @@ public class TemplateMatchingGuiCommand implements Command
 		chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
 		chooser.setAcceptAllFileFilterUsed(false);
 		if( chooser.showSaveDialog( frame ) == JFileChooser.APPROVE_OPTION ) {
-			TemplateMatchingPlugin.saveImages(results, chooser.getSelectedFile() );
+			Utilities.saveImagesToDirectory(results, chooser.getSelectedFile() );
 		}
 	}
 

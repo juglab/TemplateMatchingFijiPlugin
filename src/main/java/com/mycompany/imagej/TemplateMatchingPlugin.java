@@ -118,7 +118,8 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		double thresholdmatch = threshold;
 		StatusService statusService = this.statusService;
 		List< RandomAccessibleInterval< T > > trueSegmentations =
-				templateMatching( saveDir, segRadius, imp, template, thresholdmatch, statusService );
+				templateMatching( segRadius, imp, template, thresholdmatch, statusService );
+		saveImages( trueSegmentations, saveDir );
 
 		for ( Object results : trueSegmentations ) {
 			uiService.show( results );
@@ -126,7 +127,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 	}
 
 	private < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > templateMatching(
-			File saveDir,
 			int segRadius,
 			RandomAccessibleInterval< T > imp,
 			RandomAccessibleInterval< T > template,
@@ -156,43 +156,40 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 		}
 
-		return createSegmentationOutput( saveDir, imp, multiTimeSegStack, maxStackSize );
+		return createSegmentationOutput( multiTimeSegStack, maxStackSize );
 	}
 
 
 	///All key method implementations below
 
 	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > createSegmentationOutput(
-			final File saveDir,
-			RandomAccessibleInterval< T > imp,
-			List< RandomAccessibleInterval< T > > multiTimeSegStack,
+			List< RandomAccessibleInterval< T > > frames,
 			int maxStackSize ) {
 
-		int[] blankImDims = { ( int ) imp.dimension( 0 ), ( int ) imp.dimension( 1 ) };
-		RandomAccessibleInterval< T > blankImage = new PlanarImgFactory( Util.getTypeFromInterval( imp ) ).create( blankImDims );
-		List< RandomAccessibleInterval< T > > trueSegmentations = new ArrayList<>();
+		int[] blankImDims = { ( int ) frames.get(0).dimension( 0 ), ( int ) frames.get(0).dimension( 1 ) };
+		RandomAccessibleInterval< T > blankImage = new PlanarImgFactory( Util.getTypeFromInterval( frames.get( 0 ) ) ).create( blankImDims );
+		List< RandomAccessibleInterval< T > > channels = new ArrayList<>();
 		for ( int index = 0; index < maxStackSize; index++ ) {
 			ArrayList< RandomAccessibleInterval< T > > trueSegImageBucket = new ArrayList<>();
-			for ( int k = 0; k < multiTimeSegStack.size(); k++ ) {
-				RandomAccessibleInterval< T > singleStack = multiTimeSegStack.get( k );
-				if ( index >= singleStack.dimension( 2 ) ) {
-					trueSegImageBucket.add( blankImage );
-				} else {
-					RandomAccessibleInterval< T > hyperslice = Views.hyperSlice( singleStack, 2, index );
-
-					trueSegImageBucket.add( hyperslice );
-				}
+			for ( int k = 0; k < frames.size(); k++ ) {
+				RandomAccessibleInterval< T > frame = frames.get( k );
+				RandomAccessibleInterval< T > a = ( index >= frame.dimension( 2 ) ) ?
+					blankImage : Views.hyperSlice( frame, 2, index );
+				trueSegImageBucket.add( a );
 			}
-			RandomAccessibleInterval< T > trueSegmentation = Views.stack( trueSegImageBucket );
-			trueSegmentations.add( trueSegmentation );
-			ImagePlus segPlus = ImageJFunctions.wrap( trueSegmentation, null );
-			String strIndex = String.valueOf( index );
-
-			String savePathName = saveDir.getAbsolutePath() + "/" + strIndex + ".tif";
-
-			IJ.save( segPlus, savePathName );
+			channels.add( Views.stack( trueSegImageBucket ) );
 		}
-		return trueSegmentations;
+		return channels;
+	}
+
+	private static < T extends RealType< T > & NativeType< T > > void saveImages( List< RandomAccessibleInterval< T > > images, File directory )
+	{
+		for ( int index = 0; index < images.size(); index++ )
+		{
+			RandomAccessibleInterval< T > image = images.get( index );
+			ImagePlus imagePlus = ImageJFunctions.wrap( image, null );
+			IJ.save( imagePlus, directory.getAbsolutePath() + "/" + index + ".tif" );
+		}
 	}
 
 	private < T extends RealType< T > & NativeType< T > > ArrayList< Point > detectionCoordsPerTime(
@@ -438,7 +435,6 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 			int segmentationRadius,
 			double matchingThreshold ) {
 		return templateMatching(
-				new File( "/Users/prakash/Desktop/TemplateMatchingSegsButton" ),
 				segmentationRadius,
 				rawData,
 				template,

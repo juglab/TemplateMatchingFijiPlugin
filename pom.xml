@@ -22,7 +22,7 @@
 	<inceptionYear>2018</inceptionYear>
 	<organization>
 		<name>CSBD</name>
-		<url>http://mycompany.com/</url>
+		<url>http://csbdresden.de/</url>
 	</organization>
 	<licenses>
 		<license>
@@ -76,7 +76,7 @@
 	</ciManagement>
 
 	<properties>
-		<package-name>io.github.juglab.templatematchingplugin.command</package-name>
+		<package-name>com.indago.template_matching</package-name>
 		<license.licenseName>Simplified BSD</license.licenseName>
 		<license.copyrightOwners>mangal Prakash</license.copyrightOwners>
 		<enforcer.skip>true</enforcer.skip>

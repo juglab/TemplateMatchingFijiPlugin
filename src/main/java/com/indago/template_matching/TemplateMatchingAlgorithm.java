@@ -1,6 +1,5 @@
-package com.mycompany.imagej;
+package com.indago.template_matching;
 
-import ij.IJ;
 import ij.ImagePlus;
 import ijopencv.ij.ImagePlusMatConverter;
 import ijopencv.opencv.MatImagePlusConverter;
@@ -25,7 +24,6 @@ import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.plugin.Parameter;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;

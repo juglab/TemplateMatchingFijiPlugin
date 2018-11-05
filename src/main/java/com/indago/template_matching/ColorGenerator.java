@@ -1,4 +1,4 @@
-package com.mycompany.imagej;
+package com.indago.template_matching;
 
 import net.imglib2.type.numeric.ARGBType;
 

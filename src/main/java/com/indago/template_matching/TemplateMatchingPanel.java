@@ -2,7 +2,7 @@
  *
  */
 
-package com.mycompany.imagej;
+package com.indago.template_matching;
 
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;
@@ -32,8 +32,6 @@ import javax.swing.SwingWorker;
 import javax.swing.event.ListSelectionEvent;
 import javax.swing.event.ListSelectionListener;
 
-import com.mycompany.imagej.ColorGenerator;
-import com.mycompany.imagej.TemplateMatchingAlgorithm;
 import ij.IJ;
 import net.imglib2.img.ImagePlusAdapter;
 import net.imglib2.img.Img;

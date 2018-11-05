@@ -1,4 +1,4 @@
-package com.mycompany.imagej;
+package com.indago.template_matching;
 
 import java.io.File;
 import java.io.IOException;

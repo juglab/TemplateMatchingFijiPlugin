@@ -85,7 +85,6 @@ public class Utilities {
 	}
 
 	public static < T extends RealType< T > > RandomAccessibleInterval< T > rotate(
-			final ImageJ ij,
 			RandomAccessibleInterval< T > template,
 			int angle ) {
 		long x = -template.dimension( 0 ) / 2;
@@ -98,9 +97,7 @@ public class Utilities {
 				RealViews.affineReal(
 						( Views.interpolate( Views.extendBorder( template ), new NLinearInterpolatorFactory() ) ),
 						transform );
-		RandomAccessibleInterval< T > view = Views.interval( Views.raster( realview ), template );
-//		ij.ui().show( view );
-		return ( view );
+		return Views.interval( Views.raster( realview ), template );
 	}
 }
 

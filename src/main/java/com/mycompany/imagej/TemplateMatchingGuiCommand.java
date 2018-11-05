@@ -38,13 +38,17 @@ public class TemplateMatchingGuiCommand implements Command
 	@Parameter
 	UIService ui;
 
+	JFrame frame;
+
+	private TemplateMatchingPanel panel;
+
 	@Override
 	public void run()
 	{
-		TemplateMatchingPanel panel = new TemplateMatchingPanel(toDoubleType(image.getImgPlus().getImg()), context, logger);
-		JFrame frame = new JFrame();
+		panel = new TemplateMatchingPanel(toDoubleType(image.getImgPlus().getImg()), context, logger);
+		frame = new JFrame("Template Matching Segmentation");
 		frame.setLayout( new MigLayout("", "[grow]", "[][]") );
-		frame.add(panel.getPanel(), "grow, wrap");
+		frame.add( panel.getPanel(), "grow, wrap");
 		frame.addWindowListener( new WindowAdapter()
 		{
 			@Override
@@ -53,20 +57,20 @@ public class TemplateMatchingGuiCommand implements Command
 				panel.close();
 			}
 		} );
-		frame.add( newButton( "Show Results", () -> showResults(panel) ), "split 2");
-		frame.add( newButton( "Save Results", () -> saveResults(frame, panel) ) );
+		frame.add( newButton( "Show Results", this::showResults ), "split 2");
+		frame.add( newButton( "Save Results", this::saveResults ) );
 		frame.pack();
 		frame.setSize( 500, 500 );
 		frame.setVisible( true );
 	}
 
-	private void showResults( TemplateMatchingPanel panel )
+	private void showResults()
 	{
 		List< RandomAccessibleInterval< IntType > > results = panel.getOutputs();
 		results.forEach( ui::show );
 	}
 
-	private void saveResults( JFrame frame, TemplateMatchingPanel panel )
+	private void saveResults()
 	{
 		List< RandomAccessibleInterval< IntType > > results = panel.getOutputs();
 		JFileChooser chooser = new JFileChooser();

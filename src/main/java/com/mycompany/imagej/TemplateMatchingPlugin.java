@@ -156,30 +156,35 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 
 		}
 
-		return createSegmentationOutput( multiTimeSegStack, maxStackSize );
+		return reslice( multiTimeSegStack, maxStackSize );
 	}
 
 
 	///All key method implementations below
 
-	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > createSegmentationOutput(
+	private static < T extends RealType< T > & NativeType< T > > List< RandomAccessibleInterval< T > > reslice(
 			List< RandomAccessibleInterval< T > > frames,
 			int maxStackSize ) {
 
-		int[] blankImDims = { ( int ) frames.get(0).dimension( 0 ), ( int ) frames.get(0).dimension( 1 ) };
-		RandomAccessibleInterval< T > blankImage = new PlanarImgFactory( Util.getTypeFromInterval( frames.get( 0 ) ) ).create( blankImDims );
 		List< RandomAccessibleInterval< T > > channels = new ArrayList<>();
 		for ( int index = 0; index < maxStackSize; index++ ) {
-			ArrayList< RandomAccessibleInterval< T > > trueSegImageBucket = new ArrayList<>();
-			for ( int k = 0; k < frames.size(); k++ ) {
-				RandomAccessibleInterval< T > frame = frames.get( k );
-				RandomAccessibleInterval< T > a = ( index >= frame.dimension( 2 ) ) ?
-					blankImage : Views.hyperSlice( frame, 2, index );
-				trueSegImageBucket.add( a );
-			}
-			channels.add( Views.stack( trueSegImageBucket ) );
+			channels.add( extractChannel( frames, index ) );
 		}
 		return channels;
+	}
+
+	private static < T extends RealType< T > & NativeType< T > > RandomAccessibleInterval< T > extractChannel( List< RandomAccessibleInterval< T > > frames, int index )
+	{
+		RandomAccessibleInterval< T > blankImage = new PlanarImgFactory<>( Util.getTypeFromInterval( frames.get( 0 ) ) )
+				.create( frames.get(0).dimension( 0 ), frames.get(0).dimension( 1 ) );
+		ArrayList< RandomAccessibleInterval< T > > trueSegImageBucket = new ArrayList<>();
+		for ( int k = 0; k < frames.size(); k++ ) {
+			RandomAccessibleInterval< T > frame = frames.get( k );
+			RandomAccessibleInterval< T > a = ( index >= frame.dimension( 2 ) ) ?
+				blankImage : Views.hyperSlice( frame, 2, index );
+			trueSegImageBucket.add( a );
+		}
+		return Views.stack( trueSegImageBucket );
 	}
 
 	private static < T extends RealType< T > & NativeType< T > > void saveImages( List< RandomAccessibleInterval< T > > images, File directory )

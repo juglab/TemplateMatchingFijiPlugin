@@ -1,12 +1,10 @@
 package com.mycompany.imagej;
 
-import static org.bytedeco.javacpp.opencv_core.normalize;
-import static org.bytedeco.javacpp.opencv_imgproc.matchTemplate;
-
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
 
+import net.imglib2.type.numeric.NumericType;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -100,7 +98,7 @@ public class TemplateMatchingPlugin< T extends RealType< T > & NativeType< T > >
 		}
 	}
 
-	private static < T extends RealType< T > & NativeType< T > > void saveImages( List< RandomAccessibleInterval< T > > images, File directory )
+	public static < T extends NumericType< T > > void saveImages( List< RandomAccessibleInterval< T > > images, File directory )
 	{
 		for ( int index = 0; index < images.size(); index++ )
 		{
